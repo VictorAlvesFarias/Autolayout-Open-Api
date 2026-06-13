@@ -1,5 +1,4 @@
-import React from "react"
-import { SidebarHamburguerContainerProps, SidebarHamburguerContainer } from 'react-base-components'
+import { SidebarHamburguerContainer, SidebarHamburguerContainerProps } from 'react-base-components'
 import { componentSelector } from "react-component-selector"
 
 const hamburguerVariations = {

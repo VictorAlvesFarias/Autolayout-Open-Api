@@ -1,6 +1,5 @@
-import { componentSelector } from "react-component-selector"
 import { DropdownRootContainer, IDropdownRootContainerProps } from 'react-base-components'
-import React from "react"
+import { componentSelector } from "react-component-selector"
 
 const dropdownRootVariations = {
     default: (_: IDropdownRootContainerProps, ref: any) =>

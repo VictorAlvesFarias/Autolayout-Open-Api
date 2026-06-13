@@ -1,11 +1,11 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useState, type ReactNode } from 'react'
 import { toast } from 'react-toastify'
-import { loadOpenApiSpec, type LoadedSpec } from '../services/openapi-loader'
+import { loadOpenApiSpec, type LoadedSpec } from '../utils/openapi/openapi-loader'
 import type { ApiOperation } from '../types/operation'
 
 const DEFAULT_SPEC_URL = 'https://localhost:7187/swagger/v1/swagger.json'
 
-interface OpenApiContextValue {
+export interface OpenApiContextValue {
   specUrl: string
   setSpecUrl: (url: string) => void
   baseUrl: string
@@ -18,7 +18,18 @@ interface OpenApiContextValue {
   selectOperation: (op: ApiOperation | null) => void
 }
 
-const OpenApiContext = createContext<OpenApiContextValue | null>(null)
+export const OpenApiContext = createContext<OpenApiContextValue>({
+  specUrl: '',
+  setSpecUrl: () => { },
+  baseUrl: '',
+  setBaseUrl: () => { },
+  loaded: null,
+  loading: false,
+  error: null,
+  loadSpec: async () => { },
+  selectedOperation: null,
+  selectOperation: () => { },
+})
 
 export function OpenApiProvider({ children }: { children: ReactNode }) {
   const [specUrl, setSpecUrl] = useState(DEFAULT_SPEC_URL)
@@ -48,27 +59,18 @@ export function OpenApiProvider({ children }: { children: ReactNode }) {
     }
   }, [specUrl])
 
-  const value = useMemo(
-    () => ({
-      specUrl,
-      setSpecUrl,
-      baseUrl,
-      setBaseUrl,
-      loaded,
-      loading,
-      error,
-      loadSpec,
-      selectedOperation,
-      selectOperation: setSelectedOperation,
-    }),
-    [specUrl, baseUrl, loaded, loading, error, loadSpec, selectedOperation],
-  )
+  const value = {
+    specUrl,
+    setSpecUrl,
+    baseUrl,
+    setBaseUrl,
+    loaded,
+    loading,
+    error,
+    loadSpec,
+    selectedOperation,
+    selectOperation: setSelectedOperation,
+  }
 
   return <OpenApiContext.Provider value={value}>{children}</OpenApiContext.Provider>
-}
-
-export function useOpenApi() {
-  const ctx = useContext(OpenApiContext)
-  if (!ctx) throw new Error('useOpenApi deve ser usado dentro de OpenApiProvider')
-  return ctx
 }

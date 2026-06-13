@@ -1,6 +1,5 @@
-import React from "react"
-import { componentSelector } from "react-component-selector"
 import { IMenuContainerProps, MenuContainer } from 'react-base-components'
+import { componentSelector } from "react-component-selector"
 
 const menuVariations = {
     default: (props: IMenuContainerProps) =>

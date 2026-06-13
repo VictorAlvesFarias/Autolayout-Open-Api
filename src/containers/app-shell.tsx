@@ -1,41 +1,26 @@
-import { AtSignIcon, ChevronDown, ChevronLeft, Circle, CircleUser, CircleUserRound, LucideMenu, MailIcon, MailsIcon, NetworkIcon, Router, User, UserRound, UsersIcon, Zap } from "lucide-react";
-import React, { useContext, useState } from "react";
+import { Zap } from "lucide-react";
 import { Route, Routes, useNavigate } from "react-router-dom";
-// import { AuthContext } from "../auth/auth-context";
-import SidebarRoot from "../components/sidebar-root";
-import SidebarHref from "../components/sidebar-href";
-import SidebarMenu from "../components/sidebar-menu";
-import SidebarItem from "../components/sidebar-item";
-import SidebarContent from "../components/sidebar-content";
-import SidebarHamburguer from "../components/sidebar-hamburguer";
-import { If } from 'react-base-components';
-import AccordionTitle from "../components/accordion-title";
 import Accordion from "../components/accordion";
 import AccordionRoot from "../components/accordion-root";
-// import { useAppSelector } from "../utils/hooks/redux-hooks";
-// import Cookies from 'js-cookie';
-import { SidebarContext } from 'react-base-components';
-// import { USER_ROUTES } from "../config/routes-config";
+import AccordionTitle from "../components/accordion-title";
+import SidebarContent from "../components/sidebar-content";
+import SidebarHamburguer from "../components/sidebar-hamburguer";
+import SidebarItem from "../components/sidebar-item";
+import SidebarMenu from "../components/sidebar-menu";
+import SidebarRoot from "../components/sidebar-root";
+import { ModalClose, ModalContext, ModalOpen, SidebarContext } from 'react-base-components';
 import { AccordionContext } from 'react-base-components';
-import { ModalContext } from 'react-base-components'
-import ModalRoot from '../components/modal-root'
-import { ModalOpen } from 'react-base-components'
-import { ModalClose } from 'react-base-components'
-import Button from '../components/button'
-import { useOpenApi } from "../context/openapi-context";
+import { OpenApiContext } from "../context/openapi-context";
 import { methodBadgeClass } from "../utils/openapi/method-colors";
-import { useAuth } from "../context/auth-context";
-import { ApiResponseResult } from "../types/operation";
-import { executeRequest } from "../services/request-executor";
 import { EndpointForm } from "./endpoint-form";
 import SpecLoader from "./spec-loader";
+import ModalRoot from "../components/modal-root";
+import Button from "../components/button";
+import { useContext } from "react";
 
 function UserRouters() {
-    //   const { logout, isAuthenticated } = useContext(AuthContext);
     const navigate = useNavigate()
-    const { loaded, selectedOperation, selectOperation, loading, baseUrl, setBaseUrl } = useOpenApi()
-    // const title = useAppSelector(e => e.app.value.title)
-    // const cookies = Cookies.get();
+    const { loaded } = useContext(OpenApiContext)
 
     function redirect(path: string): string {
         const session = crypto.randomUUID()
@@ -45,8 +30,11 @@ function UserRouters() {
         return path
     }
 
+    function logout(e: any) {
+        throw new Error("Function not implemented.");
+    }
+
     return (
-        // <If conditional={isAuthenticated}>
         <SidebarContext>
             <SidebarRoot>
                 <SidebarMenu>
@@ -87,12 +75,11 @@ function UserRouters() {
                             ))
                         )}
                     </div>
-                    {/* 
                     <ModalContext>
                         <div className="flex-1 flex items-end w-full">
                             <ModalOpen className="w-full h-fit">
                                 <SidebarItem unselectable disable href="" >
-                                    <SidebarHref >Exit </SidebarHref>
+                                    <div >Exit </div>
                                 </SidebarItem>
                             </ModalOpen>
                         </div>
@@ -104,12 +91,12 @@ function UserRouters() {
                                         <Button>Exit</Button>
                                     </ModalClose>
                                     <ModalClose className='flex justify-between flex-1'>
-                                        <Button variation='red'>Cancel</Button>
+                                        <Button>Cancel</Button>
                                     </ModalClose>
                                 </div>
                             </div>
                         </ModalRoot>
-                    </ModalContext> */}
+                    </ModalContext>
                 </SidebarMenu>
                 <SidebarHamburguer>
                     <header className="flex items-center gap-2 px-6 py-4 border-b border-zinc-800 shrink-0 w-full">
@@ -156,8 +143,7 @@ function UserRouters() {
                     </Routes>
                 </SidebarContent>
             </SidebarRoot >
-        </SidebarContext >
-        // </If>
+        </SidebarContext>
     );
 }
 

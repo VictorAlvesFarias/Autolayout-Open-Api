@@ -1,25 +1,27 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { ApiOperation, ApiResponseResult } from '../types/operation'
-import type { AuthType } from '../types/auth'
+import { useContext, useEffect, useRef, useState } from 'react'
+import { IModalController, ModalClose, ModalContext, ModalOpen } from 'react-base-components'
+import { useSearchParams } from 'react-router-dom'
+import Button from '../components/button'
 import Card from '../components/card'
-import SchemaField from './schema-field'
 import Text from '../components/input-text'
 import Label from '../components/label'
+import ModalRoot from '../components/modal-root'
+import { ResponseSchema } from '../containers/response-panel'
 import { useAuth } from '../context/auth-context'
-import { useOpenApi } from '../context/openapi-context'
+import { normalizeOperation } from '../services/openapi-normalizer'
 import { executeRequest } from '../services/request-executor'
 import { createInitialFormValues } from '../utils/openapi/build-url'
-import { FieldGroup, normalizeOperation } from '../services/openapi-normalizer'
-import { ModalClose, ModalContext, ModalOpen } from 'react-base-components'
-import ModalRoot from '../components/modal-root'
-import Button from '../components/button'
-import { ResponseSchema } from '../containers/response-panel'
-import { useSearchParams } from 'react-router-dom'
+import { SchemaField } from './schema-field'
+import { OpenApiContext } from '../context/openapi-context'
+
+import type { AuthType } from '../types/auth'
+import type { ApiOperation, ApiResponseResult, FieldGroup } from '../types/operation'
+import { Grip, RotateCcw, SlidersHorizontal } from 'lucide-react'
+import InputRoot from '../components/input-root'
 
 export interface EndpointFormProps {
   operation: ApiOperation
 }
-
 
 export function EndpointForm({ operation }: EndpointFormProps) {
   const AUTH_OPTIONS: Array<{ value: AuthType; label: string }> = [
@@ -30,43 +32,28 @@ export function EndpointForm({ operation }: EndpointFormProps) {
   ]
 
   const { auth, updateAuth } = useAuth()
-  const { baseUrl } = useOpenApi()
+  const { baseUrl } = useContext(OpenApiContext)
   const [response, setResponse] = useState<ApiResponseResult | null>(null)
   const [sending, setSending] = useState(false)
-  const [values, setValues] = useState<Record<FieldGroup, Record<string, unknown>>>(() => createInitialFormValues(operation))
   const [searchParams] = useSearchParams()
   const lastAutoRunOperationId = useRef<string | null>(null)
-  const fields = normalizeOperation(operation)
+  const timeoutActionRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [values, setValues] = useState<Record<FieldGroup, Record<string, unknown>>>(() => createInitialFormValues({ operation }))
+
+  const fields = normalizeOperation(operation, [
+    {
+      match: (field) => field.id.toLowerCase() == 'query.name',
+      patch: (field) => { return { ...field, render: false } },
+    }
+  ])
+
   const parametersGroups = groupFields(fields).filter((group) => group !== 'body' && group !== 'responses')
   const body = fields.filter((field) => field.group === 'body')
   const responses = fields.filter((field) => field.group === 'responses' && field.path.includes('200'))
   const parameters = fields.filter((field) => field.group !== 'body' && field.group !== 'responses')
+  const modalParametersContext = useRef<IModalController>(null)
 
-  useEffect(() => {
-    const session = searchParams.get('session')
-
-    if (!session) {
-      return;
-    }
-
-    console.log(values)
-
-    localStorage.setItem(session, JSON.stringify(values))
-  }, [values])
-
-  useEffect(() => {
-    const session = localStorage.getItem('session')
-
-    if (!session) {
-      return;
-    }
-
-    console.log(JSON.parse(session))
-
-    setValues(JSON.parse(session))
-  }, [])
-
-  const sendRequest = useCallback(async () => {
+  async function sendRequest() {
     if (!baseUrl || sending) {
       return
     }
@@ -75,24 +62,24 @@ export function EndpointForm({ operation }: EndpointFormProps) {
     setResponse(null)
 
     try {
-      const result = await executeRequest(baseUrl, operation, values, auth)
+      const result = await executeRequest({ baseUrl, operation, values, auth })
 
       setResponse(result)
     }
     finally {
       setSending(false)
     }
-  }, [auth, baseUrl, operation, sending, values])
+  }
+
+  function groupFields(fields: ReturnType<typeof normalizeOperation>): FieldGroup[] {
+    return fields.reduce((acc: FieldGroup[], field) => (acc.includes(field.group) ? acc : [...acc, field.group]), [])
+  }
 
   function onParamChange(location: FieldGroup, name: string, value: unknown) {
     console.log(new Date().toISOString() + ' - EndpointForm.onParamChange - location, name, value:', JSON.stringify({ location, name, value }))
 
     setValues((prev) => {
-      // console.log(new Date().toISOString() + ' - EndpointForm.onParamChange - setValues - prev:', JSON.stringify({ prev }))
-
       const currentValues = prev[location] && typeof prev[location] === 'object' ? (prev[location]) : {}
-
-      // console.log(new Date().toISOString() + ' - EndpointForm.onParamChange - setValues - currentValues:', JSON.stringify({ currentValues }))
 
       const nextValues = {
         ...prev,
@@ -102,11 +89,59 @@ export function EndpointForm({ operation }: EndpointFormProps) {
         },
       }
 
-      // console.log(new Date().toISOString() + ' - EndpointForm.onParamChange - setValues - currentValues:', JSON.stringify({ nextValues }))
-
       return nextValues
     })
   }
+
+  function getValueByPath(values: Record<string, unknown>, path: string[]): unknown {
+    return path.reduce((acc, key) => (acc as Record<string, unknown>)?.[key], values as unknown)
+  }
+
+  function setValueByPath(values: Record<string, unknown>, path: string[], value: unknown): Record<string, unknown> {
+    const [head, ...tail] = path
+
+    if (tail.length === 0) {
+      return { ...values, [head]: value }
+    }
+
+    return {
+      ...values,
+      [head]: setValueByPath(
+        (values[head] as Record<string, unknown>) ?? {},
+        tail,
+        value
+      ),
+    }
+  }
+
+  function getFieldValue(group: FieldGroup, path: string[]): unknown {
+    return getValueByPath(values[group] as Record<string, unknown>, path)
+  }
+
+  function setFieldValue(group: FieldGroup, path: string[], value: unknown) {
+    setValues((prev) => ({
+      ...prev,
+      [group]: setValueByPath(prev[group] as Record<string, unknown>, path, value),
+    }))
+
+    if (timeoutActionRef.current) {
+      clearTimeout(timeoutActionRef.current)
+    }
+
+    timeoutActionRef.current = setTimeout(() => {
+      sendRequest()
+    }, 500)
+  }
+
+  useEffect(() => {
+    const session = searchParams.get('session')
+
+    if (!session) {
+      return
+    }
+
+    localStorage.setItem(session, JSON.stringify(values))
+  }, [values, searchParams])
 
   useEffect(() => {
     const hasRequiredInputs = operation.parameters.some((parameter) => parameter.required) || Boolean(operation.requestBody?.required)
@@ -124,24 +159,31 @@ export function EndpointForm({ operation }: EndpointFormProps) {
     sendRequest()
   }, [baseUrl, operation.id, operation.parameters, operation.requestBody?.required, sendRequest])
 
-  useEffect(() => {
-    setValues(createInitialFormValues(operation))
-    setResponse(null)
-
-    lastAutoRunOperationId.current = null
-  }, [operation])
-
   return (
     <div className="flex flex-col gap-4">
-      <ModalContext>
-        <div className="flex-1 flex items-end w-fit gap-3">
-          <ModalOpen className="w-full h-fit">
-            <Button>Parameters</Button>
-          </ModalOpen>
-
-          <Button onClick={() => sendRequest()}>Refresh</Button>
-        </div>
-
+      <div className="flex-1 flex items-end gap-3">
+        <InputRoot>
+          <Text
+            value={String(getFieldValue('query', ['name']) ?? '')}
+            onChange={(v) => setFieldValue('query', ['name'], v.target.value)}
+          />
+        </InputRoot>
+        <button
+          type="button"
+          onClick={() => modalParametersContext.current?.open()}
+          className="text-zinc-200 text-xs hover:underline rounded border border-zinc-800 min-w-12 min-h-12 flex items-center justify-center hover:bg-purple-600/15 transition-all"
+        >
+          <SlidersHorizontal className="w-5 h-5" />
+        </button>
+        <button
+          type="button"
+          onClick={() => sendRequest()}
+          className="text-zinc-200 text-xs hover:underline rounded border border-zinc-800 min-w-12 min-h-12 flex items-center justify-center hover:bg-purple-600/15 transition-all"
+        >
+          <RotateCcw className="w-5 h-5" />
+        </button>
+      </div>
+      <ModalContext ref={modalParametersContext}>
         <ModalRoot>
           <div className="w-full h-full flex items-center justify-center">
             <div className="w-full max-h-full max-w-2xl bg-main-black-800 flex flex-col gap-6 rounded text-white">
@@ -181,8 +223,6 @@ export function EndpointForm({ operation }: EndpointFormProps) {
         <Card>
           <h3 className="text-base font-semibold text-purple-300 mb-3">Body</h3>
           {body.filter((field) => field.group === 'body').map((field, i) => {
-            // console.log(new Date().toISOString() + ' - EndpointForm.return - body.filter - field, i:', JSON.stringify({ field, i }))
-
             return (
               <SchemaField
                 key={`${i}`}
@@ -193,39 +233,27 @@ export function EndpointForm({ operation }: EndpointFormProps) {
             )
           })}
         </Card>
-      )
-      }
+      )}
 
-      {
-        responses.length > 0 && (
-          <Card>
-            <h3 className="text-base font-semibold text-purple-300 mb-3">
-              Response
-            </h3>
+      {responses.length > 0 && (
+        <Card>
+          <h3 className="text-base font-semibold text-purple-300 mb-3">
+            Response
+          </h3>
 
-            {responses.map((responseField) =>
-              <ResponseSchema
-                field={{ ...responseField, fieldset: responses.length > 1 }}
-                value={response?.data}
-              />
-            )}
-          </Card>
-        )
-      }
+          {responses.map((responseField) =>
+            <ResponseSchema
+              field={{ ...responseField, fieldset: responses.length > 1 }}
+              value={response?.data}
+            />
+          )}
+        </Card>
+      )}
 
       <Card>
         <div className="flex items-center justify-between gap-3 mb-3">
           <h3 className="text-sm font-semibold text-zinc-300">Auth proxy</h3>
-          <button
-            type="button"
-            onClick={() => void sendRequest()}
-            disabled={!baseUrl || sending}
-            className="text-xs rounded border border-zinc-800 px-3 py-1 text-zinc-300 hover:text-white hover:bg-violet-500/10 transition-all disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {sending ? 'Enviando...' : 'Executar'}
-          </button>
         </div>
-
         <div className="flex flex-wrap gap-2 mb-3">
           {AUTH_OPTIONS.map((opt) => (
             <button
@@ -243,7 +271,7 @@ export function EndpointForm({ operation }: EndpointFormProps) {
         </div>
 
         {auth.type === 'bearer' && (
-          <div>
+          <InputRoot>
             <Label>Token</Label>
             <Text
               type="password"
@@ -251,27 +279,26 @@ export function EndpointForm({ operation }: EndpointFormProps) {
               onChange={(v) => updateAuth('bearerToken', v.target.value.toString())}
               placeholder="eyJhbGciOiJIUzI1NiIs..."
             />
-          </div>
+          </InputRoot>
         )}
 
         {auth.type === 'basic' && (
           <div className="flex flex-col gap-2">
-            <div>
+            <InputRoot>
               <Label>Usuário</Label>
               <Text
                 value={auth.basicUsername}
                 onChange={(v) => updateAuth('basicUsername', v.target.value.toString())}
               />
-            </div>
-
-            <div>
+            </InputRoot>
+            <InputRoot>
               <Label>Senha</Label>
               <Text
                 type="password"
                 value={auth.basicPassword}
                 onChange={(v) => updateAuth('basicPassword', v.target.value.toString())}
               />
-            </div>
+            </InputRoot>
           </div>
         )}
 
@@ -300,33 +327,21 @@ export function EndpointForm({ operation }: EndpointFormProps) {
                 Query
               </button>
             </div>
-
-            <div>
+            <InputRoot>
               <Label>Nome da chave</Label>
               <Text
                 value={auth.apiKeyName}
                 onChange={(v) => updateAuth('apiKeyName', v.target.value.toString())}
                 placeholder="X-Api-Key"
               />
-            </div>
-
-            <div>
+            </InputRoot>
+            <InputRoot>
               <Label>Valor</Label>
-              <Text
-                type="password"
-                value={auth.apiKeyValue}
-                onChange={(v) => updateAuth('apiKeyValue', v.target.value.toString())}
-              />
-            </div>
+              <Text type="password" value={auth.apiKeyValue} onChange={(v) => updateAuth('apiKeyValue', v.target.value.toString())} />
+            </InputRoot>
           </div>
         )}
       </Card>
     </div >
   )
 }
-
-function groupFields(fields: ReturnType<typeof normalizeOperation>): FieldGroup[] {
-  return fields.reduce((acc: FieldGroup[], field) => (acc.includes(field.group) ? acc : [...acc, field.group]), [])
-}
-
-export default EndpointForm

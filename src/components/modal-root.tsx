@@ -1,5 +1,4 @@
-import React from "react"
-import { ModalRootContainer, IModalRootContainerProps } from "react-base-components"
+import { IModalRootContainerProps, ModalRootContainer } from "react-base-components"
 import { componentSelector } from "react-component-selector"
 
 const modalRootVariations = {

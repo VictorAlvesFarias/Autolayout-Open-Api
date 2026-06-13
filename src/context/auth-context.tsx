@@ -13,8 +13,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [auth, setAuth] = useState<AuthState>(() => {
     try {
       const saved = localStorage.getItem('autolayout-auth')
+
       return saved ? { ...defaultAuthState, ...JSON.parse(saved) } : defaultAuthState
-    } catch {
+    }
+    catch {
       return defaultAuthState
     }
   })
@@ -22,7 +24,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const updateAuth = <K extends keyof AuthState>(key: K, value: AuthState[K]) => {
     setAuth((prev) => {
       const next = { ...prev, [key]: value }
+
       localStorage.setItem('autolayout-auth', JSON.stringify(next))
+
       return next
     })
   }

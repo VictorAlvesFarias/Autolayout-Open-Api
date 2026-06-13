@@ -1,12 +1,12 @@
-import { FileJson, RefreshCw, Settings } from 'lucide-react'
-import { useOpenApi } from '../context/openapi-context'
+import { Settings } from 'lucide-react'
+import { useContext, useEffect } from 'react'
 import Button from '../components/button'
-import Label from '../components/label'
 import Text from '../components/input-text'
-import { useEffect } from 'react'
+import Label from '../components/label'
+import { OpenApiContext } from '../context/openapi-context'
 
 export default function SpecLoader() {
-  const { specUrl, setSpecUrl, loading, loadSpec, loaded, error } = useOpenApi()
+  const { specUrl, setSpecUrl, loading, loadSpec, loaded, error } = useContext(OpenApiContext)
 
   useEffect(() => {
     loadSpec()

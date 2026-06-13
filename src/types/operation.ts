@@ -1,6 +1,70 @@
 import type { OpenAPIV3 } from 'openapi-types'
 
-export type HttpMethod = 'get' | 'post' | 'put' | 'patch' | 'delete' | 'head' | 'options'
+export type HttpMethod =
+  | 'get'
+  | 'post'
+  | 'put'
+  | 'patch'
+  | 'delete'
+  | 'head'
+  | 'options'
+
+export type FieldRenderMode =
+  | 'field'
+  | 'section'
+
+export type FieldGroup =
+  | 'path'
+  | 'query'
+  | 'header'
+  | 'cookie'
+  | 'body'
+  | 'responses'
+
+export type FieldType =
+  | 'object'
+  | 'array'
+  | 'string'
+  | 'number'
+  | 'integer'
+  | 'boolean'
+
+export interface OperationField {
+  id: string
+  group: FieldGroup
+  path: string[]
+  depth: number
+  name: string
+  label: string
+  type: FieldType
+  children?: OperationField[]
+  renderMode: FieldRenderMode
+  required: boolean
+  description?: string
+  defaultValue?: unknown
+  example?: unknown
+  enumValues?: unknown[]
+  placeholder?: string
+  contentType?: string
+  format?: string
+  minimum?: number
+  maximum?: number
+  exclusiveMinimum?: boolean
+  exclusiveMaximum?: boolean
+  multipleOf?: number
+  minLength?: number
+  maxLength?: number
+  pattern?: string
+  minItems?: number
+  maxItems?: number
+  uniqueItems?: boolean
+  nullable?: boolean
+  deprecated?: boolean
+  readOnly?: boolean
+  writeOnly?: boolean
+  fieldset: boolean
+  render: boolean
+}
 
 export interface ResolvedSchema {
   schema: OpenAPIV3.SchemaObject
@@ -45,12 +109,6 @@ export interface ApiOperation {
   responses: ApiResponseDefinition[]
   deprecated?: boolean
 }
-
-export interface TagGroup {
-  name: string
-  operations: ApiOperation[]
-}
-
 
 export interface ApiResponseResult {
   status: number

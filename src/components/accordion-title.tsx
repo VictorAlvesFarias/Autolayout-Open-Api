@@ -19,9 +19,6 @@ const AccordionTitleVariations = {
   ),
 }
 
-const AccordionTitle = componentSelector<
-  keyof typeof AccordionTitleVariations,
-  IAccordionTitleContainerProps
->(AccordionTitleVariations)
+const AccordionTitle = componentSelector<keyof typeof AccordionTitleVariations, IAccordionTitleContainerProps>(AccordionTitleVariations)
 
 export default AccordionTitle

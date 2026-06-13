@@ -1,11 +1,8 @@
 import type { HttpMethod } from '../../types/operation'
 
-export function methodClassName(method: HttpMethod): string {
-  return `method-${method} font-bold uppercase text-xs`
-}
-
 export function methodBadgeClass(method: HttpMethod): string {
   const base = 'px-2 py-0.5 rounded text-xs font-bold uppercase'
+
   const colors: Record<HttpMethod, string> = {
     get: 'bg-green-500/20 text-green-400',
     post: 'bg-blue-500/20 text-blue-400',
@@ -15,5 +12,6 @@ export function methodBadgeClass(method: HttpMethod): string {
     head: 'bg-zinc-500/20 text-zinc-400',
     options: 'bg-zinc-500/20 text-zinc-400',
   }
+
   return `${base} ${colors[method]}`
 }

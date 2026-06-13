@@ -1,6 +1,5 @@
-import { componentSelector } from "react-component-selector"
 import { ISidebarItemContainerProps, SidebarSidebarItemContainerContainer } from 'react-base-components'
-import React from "react"
+import { componentSelector } from "react-component-selector"
 
 const itemVariations = {
     default: (props: ISidebarItemContainerProps) =>

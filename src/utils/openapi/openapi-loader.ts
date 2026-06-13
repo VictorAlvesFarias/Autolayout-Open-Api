@@ -1,7 +1,7 @@
 import type { OpenAPIV3 } from 'openapi-types'
-import { extractOperations, groupByTag } from '../utils/openapi/extract-operations'
-import type { ApiOperation } from '../types/operation'
-import { getBaseUrl } from '../utils/openapi/build-url'
+import type { ApiOperation } from '../../types/operation'
+import { getBaseUrl } from './build-url'
+import { extractOperations, groupByTag } from './extract-operations'
 
 export interface LoadedSpec {
   document: OpenAPIV3.Document
@@ -20,8 +20,8 @@ export async function loadOpenApiSpec(specUrl: string): Promise<LoadedSpec> {
 
   const document = (await response.json()) as OpenAPIV3.Document
   const operations = extractOperations(document)
-  const tagGroups = groupByTag(operations)
-  const baseUrl = getBaseUrl(specUrl, document.servers as { url: string }[] | undefined)
+  const tagGroups = groupByTag({ operations })
+  const baseUrl = getBaseUrl({ specUrl, servers: document.servers as { url: string }[] | undefined })
 
   return {
     document,

@@ -4,78 +4,36 @@ import { dereferenceSchema, resolveRef } from './resolve-ref'
 
 const HTTP_METHODS: HttpMethod[] = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options']
 
-function resolveParameter(doc: OpenAPIV3.Document, param: OpenAPIV3.ParameterObject | OpenAPIV3.ReferenceObject): ApiParameter {
-  const resolved =
-    '$ref' in param ? resolveRef<OpenAPIV3.ParameterObject>(doc, param.$ref) : param
-
-  const schema =
-    resolved.schema != null
-      ? dereferenceSchema(doc, resolved.schema)
-      : ({ type: 'string' } as OpenAPIV3.SchemaObject)
-
-  return {
-    name: resolved.name,
-    in: resolved.in as ApiParameter['in'],
-    required: Boolean(resolved.required ?? resolved.in === 'path'),
-    description: resolved.description,
-    schema,
-    example: resolved.example,
-    examples: resolved.examples as Record<string, OpenAPIV3.ExampleObject> | undefined,
-  }
+export interface ResolveParameterArgs {
+  doc: OpenAPIV3.Document
+  param: OpenAPIV3.ParameterObject | OpenAPIV3.ReferenceObject
 }
 
-function resolveRequestBody(
-  doc: OpenAPIV3.Document,
-  body: OpenAPIV3.RequestBodyObject | OpenAPIV3.ReferenceObject,
-): ApiRequestBody {
-  const resolved =
-    '$ref' in body ? resolveRef<OpenAPIV3.RequestBodyObject>(doc, body.$ref) : body
-
-  const contents = Object.entries(resolved.content ?? {}).map(([contentType, media]) => ({
-    contentType,
-    schema: media.schema
-      ? dereferenceSchema(doc, media.schema)
-      : ({ type: 'object' } as OpenAPIV3.SchemaObject),
-  }))
-
-  return {
-    required: Boolean(resolved.required),
-    contents,
-  }
+export interface ResolveRequestBodyArgs {
+  doc: OpenAPIV3.Document
+  body: OpenAPIV3.RequestBodyObject | OpenAPIV3.ReferenceObject
 }
 
-function resolveResponses(
-  doc: OpenAPIV3.Document,
-  responses: OpenAPIV3.ResponsesObject | OpenAPIV3.ReferenceObject | undefined,
-): ApiResponseDefinition[] {
-  if (!responses) return []
-
-  const resolved = isReferenceObject(responses)
-    ? resolveRef<OpenAPIV3.ResponsesObject>(doc, responses.$ref)
-    : responses
-
-  return Object.entries(resolved).map(([statusCode, response]) => {
-    const resolvedResponse = isReferenceObject(response)
-      ? resolveRef<OpenAPIV3.ResponseObject>(doc, response.$ref)
-      : response
-
-    const contents = Object.entries(resolvedResponse.content ?? {}).map(([contentType, media]) => ({
-      contentType,
-      schema: media.schema
-        ? dereferenceSchema(doc, media.schema)
-        : ({ type: 'object' } as OpenAPIV3.SchemaObject),
-    }))
-
-    return {
-      statusCode,
-      description: resolvedResponse.description,
-      contents,
-    }
-  })
+export interface ResolveResponsesArgs {
+  doc: OpenAPIV3.Document
+  responses: OpenAPIV3.ResponsesObject | OpenAPIV3.ReferenceObject | undefined
 }
 
-function isReferenceObject(value: unknown): value is OpenAPIV3.ReferenceObject {
-  return typeof value === 'object' && value !== null && '$ref' in value && typeof (value as { $ref?: unknown }).$ref === 'string'
+export interface IsReferenceObjectArgs {
+  value: unknown
+}
+
+export interface ExtractOperationsArgs {
+  doc: OpenAPIV3.Document
+}
+
+export interface MergeParametersArgs {
+  pathLevel: ApiParameter[]
+  operationLevel: ApiParameter[]
+}
+
+export interface GroupByTagArgs {
+  operations: ApiOperation[]
 }
 
 export function extractOperations(doc: OpenAPIV3.Document): ApiOperation[] {
@@ -84,14 +42,14 @@ export function extractOperations(doc: OpenAPIV3.Document): ApiOperation[] {
   for (const [path, pathItem] of Object.entries(doc.paths ?? {})) {
     if (!pathItem) continue
 
-    const pathLevelParams = (pathItem.parameters ?? []).map((p) => resolveParameter(doc, p))
+    const pathLevelParams = (pathItem.parameters ?? []).map((p) => resolveParameter({ doc, param: p }))
 
     for (const method of HTTP_METHODS) {
       const operation = pathItem[method]
       if (!operation) continue
 
-      const opParams = (operation.parameters ?? []).map((p) => resolveParameter(doc, p))
-      const mergedParams = mergeParameters(pathLevelParams, opParams)
+      const opParams = (operation.parameters ?? []).map((p) => resolveParameter({ doc, param: p }))
+      const mergedParams = mergeParameters({ pathLevel: pathLevelParams, operationLevel: opParams })
 
       const tags =
         operation.tags?.length ? operation.tags : operation.operationId ? [operation.operationId.split('_')[0]] : ['Geral']
@@ -107,9 +65,9 @@ export function extractOperations(doc: OpenAPIV3.Document): ApiOperation[] {
         tags,
         parameters: mergedParams,
         requestBody: operation.requestBody
-          ? resolveRequestBody(doc, operation.requestBody)
+          ? resolveRequestBody({ doc, body: operation.requestBody })
           : undefined,
-        responses: resolveResponses(doc, operation.responses),
+        responses: resolveResponses({ doc, responses: operation.responses }),
         deprecated: operation.deprecated,
       })
     }
@@ -122,27 +80,230 @@ export function extractOperations(doc: OpenAPIV3.Document): ApiOperation[] {
   })
 }
 
-function mergeParameters(pathLevel: ApiParameter[], operationLevel: ApiParameter[]): ApiParameter[] {
+export function resolveParameter(args: ResolveParameterArgs): ApiParameter {
+  let resolved: OpenAPIV3.ParameterObject
+
+  if ('$ref' in args.param) {
+    resolved = resolveRef<OpenAPIV3.ParameterObject>({
+      doc: args.doc,
+      ref: args.param.$ref,
+    })
+  }
+  else {
+    resolved = args.param
+  }
+
+  let schema: OpenAPIV3.SchemaObject
+
+  if (resolved.schema != null) {
+    schema = dereferenceSchema({
+      doc: args.doc,
+      schema: resolved.schema,
+    })
+  }
+  else {
+    schema = {
+      type: 'string',
+    } as OpenAPIV3.SchemaObject
+  }
+
+  let required = false
+
+  if (resolved.required !== undefined) {
+    required = Boolean(resolved.required)
+  }
+  else {
+    required = resolved.in === 'path'
+  }
+
+  return {
+    name: resolved.name,
+    in: resolved.in as ApiParameter['in'],
+    required,
+    description: resolved.description,
+    schema,
+    example: resolved.example,
+    examples:
+      resolved.examples as
+      | Record<string, OpenAPIV3.ExampleObject>
+      | undefined,
+  }
+}
+
+export function resolveRequestBody(args: ResolveRequestBodyArgs): ApiRequestBody {
+  let resolved: OpenAPIV3.RequestBodyObject
+
+  if ('$ref' in args.body) {
+    resolved = resolveRef<OpenAPIV3.RequestBodyObject>({
+      doc: args.doc,
+      ref: args.body.$ref,
+    })
+  }
+  else {
+    resolved = args.body
+  }
+
+  const contents = []
+
+  const contentEntries = Object.entries(
+    resolved.content ?? {},
+  )
+
+  for (const [contentType, media] of contentEntries) {
+    let schema: OpenAPIV3.SchemaObject
+
+    if (media.schema) {
+      schema = dereferenceSchema({
+        doc: args.doc,
+        schema: media.schema,
+      })
+    }
+    else {
+      schema = {
+        type: 'object',
+      } as OpenAPIV3.SchemaObject
+    }
+
+    contents.push({
+      contentType,
+      schema,
+    })
+  }
+
+  return {
+    required: Boolean(resolved.required),
+    contents,
+  }
+}
+
+export function isReferenceObject(args: IsReferenceObjectArgs): boolean {
+  if (typeof args.value !== 'object') {
+    return false
+  }
+
+  if (args.value === null) {
+    return false
+  }
+
+  if (!('$ref' in args.value)) {
+    return false
+  }
+
+  const value = args.value as {
+    $ref?: unknown
+  }
+
+  if (typeof value.$ref !== 'string') {
+    return false
+  }
+
+  return true
+}
+
+export function mergeParameters(args: MergeParametersArgs,): ApiParameter[] {
   const map = new Map<string, ApiParameter>()
-  for (const p of pathLevel) {
-    map.set(`${p.in}:${p.name}`, p)
+
+  for (const parameter of args.pathLevel) {
+    map.set(
+      `${parameter.in}:${parameter.name}`,
+      parameter,
+    )
   }
-  for (const p of operationLevel) {
-    map.set(`${p.in}:${p.name}`, p)
+
+  for (const parameter of args.operationLevel) {
+    map.set(
+      `${parameter.in}:${parameter.name}`,
+      parameter,
+    )
   }
+
   return Array.from(map.values())
 }
 
-export function groupByTag(operations: ApiOperation[]): { name: string; operations: ApiOperation[] }[] {
+export function groupByTag(args: GroupByTagArgs,): { name: string; operations: ApiOperation[] }[] {
   const groups = new Map<string, ApiOperation[]>()
 
-  for (const op of operations) {
-    const tag = op.tags[0] ?? 'Geral'
-    if (!groups.has(tag)) groups.set(tag, [])
-    groups.get(tag)!.push(op)
+  for (const operation of args.operations) {
+    let tag = 'Geral'
+
+    if (operation.tags[0]) {
+      tag = operation.tags[0]
+    }
+
+    if (!groups.has(tag)) {
+      groups.set(tag, [])
+    }
+
+    groups.get(tag)!.push(operation)
   }
 
   return Array.from(groups.entries())
-    .map(([name, ops]) => ({ name, operations: ops }))
+    .map(([name, operations]) => ({
+      name,
+      operations,
+    }))
     .sort((a, b) => a.name.localeCompare(b.name))
+}
+
+export function resolveResponses(args: ResolveResponsesArgs): ApiResponseDefinition[] {
+  if (!args.responses) {
+    return []
+  }
+
+  let resolved: OpenAPIV3.ResponsesObject
+
+  // Fix 1: correct args shape; Fix 2: cast to ReferenceObject before accessing .$ref
+  if (isReferenceObject({ value: args.responses })) {
+    const reference = args.responses as OpenAPIV3.ReferenceObject
+    resolved = resolveRef<OpenAPIV3.ResponsesObject>({
+      doc: args.doc,
+      ref: reference.$ref,
+    })
+  } else {
+    // Fix 3: narrow the type explicitly so TS accepts the assignment
+    resolved = args.responses as OpenAPIV3.ResponsesObject
+  }
+
+  const result: ApiResponseDefinition[] = []
+
+  for (const [statusCode, response] of Object.entries(resolved)) {
+    let resolvedResponse: OpenAPIV3.ResponseObject
+
+    if (isReferenceObject({ value: response })) {
+      const reference = response as OpenAPIV3.ReferenceObject
+      resolvedResponse = resolveRef<OpenAPIV3.ResponseObject>({
+        doc: args.doc,
+        ref: reference.$ref,
+      })
+    } else {
+      resolvedResponse = response as OpenAPIV3.ResponseObject
+    }
+
+    // Fix 4: declare contentEntries and contents inside the loop
+    const contentEntries = Object.entries(resolvedResponse.content ?? {})
+    const contents: { contentType: string; schema: OpenAPIV3.SchemaObject }[] = []
+
+    for (const [contentType, media] of contentEntries) {
+      let schema: OpenAPIV3.SchemaObject
+
+      if (media.schema) {
+        schema = dereferenceSchema({
+          doc: args.doc,
+          schema: media.schema,
+        })
+      } else {
+        schema = { type: 'object' }
+      }
+
+      contents.push({ contentType, schema })
+    }
+
+    result.push({
+      statusCode,
+      description: resolvedResponse.description,
+      contents,
+    })
+  }
+
+  return result
 }

@@ -1,95 +1,95 @@
-import { FieldGroup } from '../../services/openapi-normalizer'
-import type { ApiOperation } from '../../types/operation'
+import type { ApiOperation, FieldGroup } from '../../types/operation'
 import { getDefaultForSchema } from './default-values'
 
-export function getBaseUrl(specUrl: string, servers?: { url: string }[]): string {
-  if (servers?.length) {
-    return servers[0].url.replace(/\/$/, '')
+export interface GetBaseUrlArgs {
+  specUrl: string
+  servers?: { url: string }[]
+}
+
+export interface BuildRequestUrlArgs {
+  baseUrl: string
+  operation: ApiOperation | null
+  values: Record<FieldGroup, Record<string, unknown>>
+}
+
+export interface AppendQueryParamsArgs {
+  url: URL
+  obj: Record<string, unknown>
+  prefix?: string
+}
+
+export interface CreateInitialFormValuesArgs {
+  operation: ApiOperation
+}
+
+export interface SetNestedValueArgs {
+  target: Record<string, unknown>
+  segments: string[]
+  value: unknown
+}
+
+export function getBaseUrl(args: GetBaseUrlArgs): string {
+  if (args.servers?.length) {
+    return args.servers[0].url.replace(/\/$/, '')
   }
 
   try {
-    const url = new URL(specUrl)
+    const url = new URL(args.specUrl)
     return `${url.protocol}//${url.host}`
   } catch {
     return ''
   }
 }
 
-// build-url.ts
-export function buildRequestUrl(
-  baseUrl: string,
-  operation: ApiOperation | null,
-  values: Record<FieldGroup, Record<string, unknown>>,
-): string {
-  let path = operation?.path
+export function buildRequestUrl(args: BuildRequestUrlArgs): string {
+  let path = args.operation?.path
 
-  for (const [key, value] of Object.entries(values.path)) {
-    if (value === undefined || value === null || value === '') continue
+  for (const [key, value] of Object.entries(args.values.path)) {
+    if (value === undefined || value === null || value === '') {
+      continue
+    }
+
+    let encodedValue: string
+
+    if (typeof value === 'object') {
+      encodedValue = JSON.stringify(value)
+    } else {
+      encodedValue = String(value)
+    }
 
     path = path?.replace(
       `{${key}}`,
-      encodeURIComponent(
-        typeof value === 'object' ? JSON.stringify(value) : String(value),
-      ),
+      encodeURIComponent(encodedValue),
     )
   }
 
-  const url = new URL(
-    path ?? '',
-    baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`,
-  )
+  let baseUrl = args.baseUrl
 
-  appendQueryParams(url, values.query)
+  if (!baseUrl.endsWith('/')) {
+    baseUrl = `${baseUrl}/`
+  }
+
+  const url = new URL(path ?? '', baseUrl)
+
+  appendQueryParams({
+    url,
+    obj: args.values.query,
+  })
 
   return url.toString()
 }
 
-/**
- * Adiciona parâmetros de query expandindo objetos aninhados com notação de ponto.
- * Ex: { Address: { Street: "Rua A" } } → Address.Street=Rua+A
- */
-function appendQueryParams(
-  url: URL,
-  obj: Record<string, unknown>,
-  prefix = '',
-): void {
-  for (const [key, value] of Object.entries(obj)) {
-    if (value === undefined || value === null || value === '') continue
+export function createInitialFormValues(args: CreateInitialFormValuesArgs): Record<FieldGroup, Record<string, unknown>> {
+  const session = new URLSearchParams(window.location.search).get('session')
 
-    const fullKey = prefix ? `${prefix}.${key}` : key
-
-    if (Array.isArray(value)) {
-      value.forEach((item, index) => {
-        if (item === undefined || item === null) return
-
-        if (typeof item === 'object') {
-          // Array de objetos: expande com índice → Phones[0].Number=123
-          appendQueryParams(
-            url,
-            item as Record<string, unknown>,
-            `${fullKey}[${index}]`,
-          )
-        } else {
-          // Array de primitivos: repete a chave → Ids=1&Ids=2
-          url.searchParams.append(fullKey, String(item))
-        }
-      })
-      continue
+  if (session) {
+    const stored = localStorage.getItem(session)
+    
+    if (stored) {
+      return JSON.parse(stored)
     }
-
-    if (typeof value === 'object') {
-      // Objeto aninhado: expande com ponto → Address.Street=123
-      appendQueryParams(url, value as Record<string, unknown>, fullKey)
-      continue
-    }
-
-    url.searchParams.set(fullKey, String(value))
   }
-}
-// build-url.ts
-export function createInitialFormValues(
-  operation: ApiOperation,
-): Record<FieldGroup, Record<string, unknown>> {
+
   const values: Record<FieldGroup, Record<string, unknown>> = {
     path: {},
     query: {},
@@ -99,29 +99,43 @@ export function createInitialFormValues(
     responses: {},
   }
 
-  for (const param of operation.parameters) {
+  for (const param of args?.operation?.parameters ?? []) {
     const bucket = values[param.in]
-    const defaultVal =
-      param.example ??
-      (param.examples
-        ? Object.values(param.examples)[0]?.value
-        : undefined) ??
-      getDefaultForSchema(param.schema)
+
+    let defaultVal = param.example
+
+    if (defaultVal === undefined) {
+      if (param.examples) {
+        defaultVal = Object.values(param.examples)[0]?.value
+      }
+    }
+
+    if (defaultVal === undefined) {
+      defaultVal = getDefaultForSchema({
+        schema: param.schema,
+      })
+    }
 
     const segments = param.name.split('.')
 
     if (segments.length === 1) {
-      // Parâmetro simples: "Name", "MinAge", etc.
       bucket[param.name] = defaultVal
     } else {
-      // Parâmetro dotted: "Address.Street" → monta { Address: { Street: "" } }
-      setNestedValue(bucket, segments, defaultVal)
+      setNestedValue({
+        target: bucket,
+        segments,
+        value: defaultVal,
+      })
     }
   }
 
-  if (operation.requestBody?.contents.length) {
-    const first = operation.requestBody.contents[0]
-    const bodyDefault = getDefaultForSchema(first.schema)
+  if (args?.operation?.requestBody?.contents?.length) {
+    const first = args.operation.requestBody.contents[0]
+
+    const bodyDefault = getDefaultForSchema({
+      schema: first.schema,
+    })
+
     if (bodyDefault && typeof bodyDefault === 'object') {
       Object.assign(values.body, bodyDefault as object)
     }
@@ -130,16 +144,61 @@ export function createInitialFormValues(
   return values
 }
 
-/** Insere um valor em um caminho aninhado, mesclando objetos existentes */
-function setNestedValue(
-  target: Record<string, unknown>,
-  segments: string[],
-  value: unknown,
-): void {
-  let current = target
+export function appendQueryParams(args: AppendQueryParamsArgs): void {
+  for (const [key, value] of Object.entries(args.obj)) {
+    if (value === undefined || value === null || value === '') {
+      continue
+    }
 
-  for (let i = 0; i < segments.length - 1; i++) {
-    const key = segments[i]
+    let fullKey = key
+
+    if (args.prefix) {
+      fullKey = `${args.prefix}.${key}`
+    }
+
+    if (Array.isArray(value)) {
+      value.forEach((item, index) => {
+        if (item === undefined || item === null) {
+          return
+        }
+
+        if (typeof item === 'object') {
+          appendQueryParams({
+            url: args.url,
+            obj: item as Record<string, unknown>,
+            prefix: `${fullKey}[${index}]`,
+          })
+        }
+        else {
+          args.url.searchParams.append(
+            fullKey,
+            String(item),
+          )
+        }
+      })
+
+      continue
+    }
+
+    if (typeof value === 'object') {
+      appendQueryParams({
+        url: args.url,
+        obj: value as Record<string, unknown>,
+        prefix: fullKey,
+      })
+
+      continue
+    }
+
+    args.url.searchParams.set(fullKey, String(value))
+  }
+}
+
+export function setNestedValue(args: SetNestedValueArgs): void {
+  let current = args.target
+
+  for (let i = 0; i < args.segments.length - 1; i++) {
+    const key = args.segments[i]
 
     if (
       current[key] === undefined ||
@@ -153,5 +212,5 @@ function setNestedValue(
     current = current[key] as Record<string, unknown>
   }
 
-  current[segments[segments.length - 1]] = value
+  current[args.segments[args.segments.length - 1]] = args.value
 }

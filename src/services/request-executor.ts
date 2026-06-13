@@ -4,13 +4,22 @@ import type { ApiOperation, ApiResponseResult } from '../types/operation'
 import { buildRequestUrl } from '../utils/openapi/build-url'
 import { FieldGroup } from './openapi-normalizer'
 
-export async function executeRequest(
-  baseUrl: string,
-  operation: ApiOperation,
-  values: Record<FieldGroup, Record<string, unknown>>,
-  auth: AuthState,
-): Promise<ApiResponseResult> {
-  const url = buildRequestUrl(baseUrl, operation, values)
+export interface ExecuteRequestArgs {
+  baseUrl: string
+  operation: ApiOperation
+  values: Record<FieldGroup, Record<string, unknown>>
+  auth: AuthState
+}
+
+export interface ApplyAuthArgs {
+  headers: Record<string, string>
+  values: Record<FieldGroup, Record<string, unknown>>
+  auth: AuthState
+}
+
+export async function executeRequest(args: ExecuteRequestArgs): Promise<ApiResponseResult> {
+  const { baseUrl, operation, values, auth } = args
+  const url = buildRequestUrl({ baseUrl, operation, values })
   const headers: Record<string, string> = {}
 
   for (const [key, value] of Object.entries(values.header)) {
@@ -19,7 +28,7 @@ export async function executeRequest(
     }
   }
 
-  applyAuth(headers, values, auth)
+  applyAuth({ headers, values, auth })
 
   const config: AxiosRequestConfig = {
     method: operation.method,
@@ -77,42 +86,37 @@ export async function executeRequest(
   }
 }
 
-function applyAuth(
-  headers: Record<string, string>,
-  values: Record<FieldGroup, Record<string, unknown>>,
-  auth: AuthState,
-): void {
-  switch (auth.type) {
-    case 'bearer':
-      if (auth.bearerToken) {
-        headers.Authorization = `Bearer ${auth.bearerToken}`
-      }
-      break
-    case 'basic': {
-      if (auth.basicUsername || auth.basicPassword) {
-        const encoded = btoa(`${auth.basicUsername}:${auth.basicPassword}`)
-        headers.Authorization = `Basic ${encoded}`
-      }
-      break
+export function applyAuth(args: ApplyAuthArgs): void {
+  const { headers, values, auth } = args
+
+  if (auth.type == 'bearer') {
+    if (auth.bearerToken) {
+      headers.Authorization = `Bearer ${auth.bearerToken}`
     }
-    case 'apiKey':
-      if (auth.apiKeyName && auth.apiKeyValue) {
-        if (auth.apiKeyIn === 'header') {
-          headers[auth.apiKeyName] = auth.apiKeyValue
-        } else {
-          values.query[auth.apiKeyName] = auth.apiKeyValue
-        }
+  }
+  else if (auth.type == 'basic') {
+    if (auth.basicUsername || auth.basicPassword) {
+      const encoded = btoa(`${auth.basicUsername}:${auth.basicPassword}`)
+      headers.Authorization = `Basic ${encoded}`
+    }
+  }
+  else if (auth.type == 'apiKey') {
+
+    if (auth.apiKeyName && auth.apiKeyValue) {
+      if (auth.apiKeyIn === 'header') {
+        headers[auth.apiKeyName] = auth.apiKeyValue
+      } else {
+        values.query[auth.apiKeyName] = auth.apiKeyValue
       }
-      break
-    default:
-      break
+    }
   }
 }
 
-function parseJsonSafe(value: string): unknown {
+export function parseJsonSafe(value: string): unknown {
   try {
     return JSON.parse(value)
-  } catch {
+  }
+  catch {
     return value
   }
 }

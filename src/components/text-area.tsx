@@ -1,4 +1,4 @@
-import { TextContainer, ITextContainerProps } from 'react-base-components'
+import { ITextContainerProps, TextContainer } from 'react-base-components'
 import { componentSelector } from 'react-component-selector'
 
 const textAreaVariations = {
