@@ -1,4 +1,5 @@
 import type { OpenAPIV3 } from 'openapi-types'
+import { FieldPatchRule } from '../services/openapi-normalizer'
 
 export type HttpMethod =
   | 'get'
@@ -28,6 +29,8 @@ export type FieldType =
   | 'number'
   | 'integer'
   | 'boolean'
+
+export type ActionType = 'request' | 'navigate' | 'init'
 
 export interface OperationField {
   id: string
@@ -117,4 +120,49 @@ export interface ApiResponseResult {
   data: unknown
   durationMs: number
   error?: string
+}
+
+export interface ActionBind {
+  from?: string
+  to: string
+  fallbackValue?: unknown
+}
+
+export interface ResolvedAction {
+  type: ActionType
+  postback?: boolean
+  label: string
+  path: string
+  operationId: string
+  bind: ActionBind[]
+  returnBind?: ActionBind[] // só para type='init': mapeia retorno → values do form
+  operation: ApiOperation
+}
+
+export interface OperationEndpoint {
+  id: string
+  method: HttpMethod
+  operationPath: string
+  fields: OperationField[]
+  actions: ResolvedAction[]
+  render: boolean
+  runOnInit: boolean
+}
+
+export interface EndpointActionConfig {
+  type: ActionType
+  postback?: boolean
+  targetOperationId: string
+  label: string
+  path: string
+  bind: ActionBind[]
+  returnBind?: ActionBind[]
+}
+
+export interface EndpointConfig {
+  operationId: string
+  rules?: FieldPatchRule[]
+  actions?: EndpointActionConfig[]
+  render?: boolean
+  runOnInit?: boolean
 }

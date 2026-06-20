@@ -80,16 +80,6 @@ export function buildRequestUrl(args: BuildRequestUrlArgs): string {
 }
 
 export function createInitialFormValues(args: CreateInitialFormValuesArgs): Record<FieldGroup, Record<string, unknown>> {
-  const session = new URLSearchParams(window.location.search).get('session')
-
-  if (session) {
-    const stored = localStorage.getItem(session)
-    
-    if (stored) {
-      return JSON.parse(stored)
-    }
-  }
-
   const values: Record<FieldGroup, Record<string, unknown>> = {
     path: {},
     query: {},
@@ -120,7 +110,8 @@ export function createInitialFormValues(args: CreateInitialFormValuesArgs): Reco
 
     if (segments.length === 1) {
       bucket[param.name] = defaultVal
-    } else {
+    }
+    else {
       setNestedValue({
         target: bucket,
         segments,
@@ -133,7 +124,7 @@ export function createInitialFormValues(args: CreateInitialFormValuesArgs): Reco
     const first = args.operation.requestBody.contents[0]
 
     const bodyDefault = getDefaultForSchema({
-      schema: first.schema,
+      schema: first.schema
     })
 
     if (bodyDefault && typeof bodyDefault === 'object') {
@@ -146,6 +137,7 @@ export function createInitialFormValues(args: CreateInitialFormValuesArgs): Reco
 
 export function appendQueryParams(args: AppendQueryParamsArgs): void {
   for (const [key, value] of Object.entries(args.obj)) {
+
     if (value === undefined || value === null || value === '') {
       continue
     }

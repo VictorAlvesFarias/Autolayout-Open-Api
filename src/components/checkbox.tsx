@@ -1,8 +1,9 @@
+import { LegacyRef } from 'react'
 import { CheckboxContainer, ICheckboxContainerProps } from 'react-base-components'
 import { componentSelector } from 'react-component-selector'
 
 const checkboxVariations = {
-  default: (props: ICheckboxContainerProps, ref: unknown) => (
+  default: (props: ICheckboxContainerProps, ref: LegacyRef<HTMLInputElement>) => (
     <CheckboxContainer
       {...props}
       ref={ref}

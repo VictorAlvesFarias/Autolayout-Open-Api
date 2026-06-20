@@ -14,7 +14,7 @@ const AccordionTitleVariations = {
     <AccordionTitleContainer
       {...props}
       ref={ref}
-      className="text-zinc-200 font-semibold text-sm transition-colors py-3 hover:bg-zinc-800 cursor-pointer"
+      className="text-zinc-200 font-semibold text-sm transition-colors p-3 hover:bg-zinc-800 cursor-pointer"
     />
   ),
 }

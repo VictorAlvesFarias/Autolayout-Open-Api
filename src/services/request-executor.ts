@@ -1,8 +1,7 @@
 import axios, { type AxiosRequestConfig } from 'axios'
 import type { AuthState } from '../types/auth'
-import type { ApiOperation, ApiResponseResult } from '../types/operation'
+import type { ApiOperation, ApiResponseResult, FieldGroup } from '../types/operation'
 import { buildRequestUrl } from '../utils/openapi/build-url'
-import { FieldGroup } from './openapi-normalizer'
 
 export interface ExecuteRequestArgs {
   baseUrl: string
@@ -39,68 +38,65 @@ export async function executeRequest(args: ExecuteRequestArgs): Promise<ApiRespo
 
   if (operation.requestBody && values.body !== undefined) {
     const contentType = 'application/json'
+
     headers['Content-Type'] = contentType
 
     if (contentType.includes('application/json')) {
-      config.data =
-        typeof values.body === 'string' ? parseJsonSafe(values.body) : values.body
-    } else if (contentType.includes('application/x-www-form-urlencoded')) {
+      config.data = typeof values.body === 'string' ? parseJsonSafe(values.body) : values.body
+    }
+    else if (contentType.includes('application/x-www-form-urlencoded')) {
       const params = new URLSearchParams()
+
       if (typeof values.body === 'object' && values.body !== null) {
         Object.entries(values.body as Record<string, string>).forEach(([k, v]) =>
           params.set(k, String(v)),
         )
       }
+
       config.data = params.toString()
-    } else {
+    }
+    else {
       config.data = values.body
     }
   }
 
   const start = performance.now()
+  const response = await axios(config)
+  const responseHeaders: Record<string, string> = {}
 
-  try {
-    const response = await axios(config)
-    const responseHeaders: Record<string, string> = {}
-    Object.entries(response.headers).forEach(([k, v]) => {
-      if (typeof v === 'string') responseHeaders[k] = v
-    })
+  Object.entries(response.headers).forEach(([k, v]) => {
+    if (typeof v === 'string') {
+      responseHeaders[k] = v
+    }
+  })
 
-    return {
-      status: response.status,
-      statusText: response.statusText,
-      headers: responseHeaders,
-      data: response.data,
-      durationMs: Math.round(performance.now() - start),
-    }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Erro desconhecido'
-    return {
-      status: 0,
-      statusText: 'Network Error',
-      headers: {},
-      data: null,
-      durationMs: Math.round(performance.now() - start),
-      error: message,
-    }
+  const result = {
+    status: response.status,
+    statusText: response.statusText,
+    headers: responseHeaders,
+    data: response.data,
+    durationMs: Math.round(performance.now() - start),
   }
+
+  return result
+
 }
 
 export function applyAuth(args: ApplyAuthArgs): void {
   const { headers, values, auth } = args
 
-  if (auth.type == 'bearer') {
+  if (auth?.type == 'bearer') {
     if (auth.bearerToken) {
       headers.Authorization = `Bearer ${auth.bearerToken}`
     }
   }
-  else if (auth.type == 'basic') {
+  else if (auth?.type == 'basic') {
     if (auth.basicUsername || auth.basicPassword) {
       const encoded = btoa(`${auth.basicUsername}:${auth.basicPassword}`)
       headers.Authorization = `Basic ${encoded}`
     }
   }
-  else if (auth.type == 'apiKey') {
+  else if (auth?.type == 'apiKey') {
 
     if (auth.apiKeyName && auth.apiKeyValue) {
       if (auth.apiKeyIn === 'header') {
