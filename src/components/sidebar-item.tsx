@@ -1,14 +1,15 @@
-import { ISidebarItemContainerProps, SidebarSidebarItemContainerContainer } from 'react-base-components'
+import { ISidebarItemContainerProps, SidebarItemContainer } from 'react-base-components'
 import { componentSelector } from "react-component-selector"
 
 const itemVariations = {
     default: (props: ISidebarItemContainerProps) =>
-        <SidebarSidebarItemContainerContainer
+        <SidebarItemContainer
+
             {...props}
             className="w-full flex items-center gap-3 text-ellipsis overflow-hidden pl-3 p-2 min- rounded text-zinc-100 text-sm cursor-pointer  duration-300 transition-all  hover:bg-black hover:bg-opacity-30 aria-selected:text-main-violet-100 aria-selected:font-semibold aria-checked:bg-opacity-30 aria-checked:bg-black "
         />,
     accordion: (props: ISidebarItemContainerProps) =>
-        <SidebarSidebarItemContainerContainer
+        <SidebarItemContainer
             {...props}
             className="ml-3 flex-1 flex items-center gap-3 text-ellipsis overflow-hidden pl-3 p-2 min-h-9 rounded text-zinc-100 text-sm cursor-pointer duration-300 transition-all  aria-selected:font-semibold hover:bg-black hover:bg-opacity-30 aria-selected:bg-black aria-selected:bg-opacity-30 aria-selected:border-l-oikos-green aria-selected:border-l-8 "
         />,

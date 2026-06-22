@@ -9,59 +9,17 @@ import Text from '../components/input-text'
 import Label from '../components/label'
 import ModalRoot from '../components/modal-root'
 import TextArea from '../components/text-area'
-import { isObjectArray } from '../services/openapi-normalizer'
+import { createDefaultValue, isObjectArray, resolveInputType } from '../services/openapi-normalizer'
 import { OperationField } from '../types/operation'
 
-export interface SchemaFieldProps {
+export interface DinamicFieldForProps {
   field: OperationField
   fieldParent?: OperationField
   value: unknown
   onChange: (value: unknown) => void
 }
 
-export function createDefaultValue(field?: OperationField): unknown {
-  if (!field) {
-    return ''
-  }
-
-  if (field.defaultValue !== undefined) {
-    return field.defaultValue
-  }
-
-  if (field.type === 'array') {
-    return []
-  }
-
-  if (field.type === 'object') {
-    return Object.fromEntries(
-      (field.children ?? []).map(child => [
-        child.name,
-        createDefaultValue(child),
-      ])
-    )
-  }
-
-  if (field.type === 'boolean') {
-    return false
-  }
-
-  if (field.type === 'integer' || field.type === 'number') {
-    return 0
-  }
-
-  return ''
-}
-
-export function resolveInputType(field: OperationField): string {
-  if (field.format === 'password') return 'password'
-  if (field.format === 'email') return 'email'
-  if (field.format === 'date') return 'date'
-  if (field.format === 'date-time') return 'datetime-local'
-  if (field.type === 'integer' || field.type === 'number') return 'number'
-  return 'text'
-}
-
-export function SchemaEnumField({ field, value, onChange }: SchemaFieldProps) {
+export function DinamicFieldForEnum({ field, value, onChange }: DinamicFieldForProps) {
   return (
     <InputRoot>
       <Label>
@@ -88,7 +46,7 @@ export function SchemaEnumField({ field, value, onChange }: SchemaFieldProps) {
   )
 }
 
-export function SchemaBooleanField({ field, value, onChange }: SchemaFieldProps) {
+export function DinamicFieldForBoolean({ field, value, onChange }: DinamicFieldForProps) {
   return (
     <InputRoot variation="checkbox">
       <Label>
@@ -111,13 +69,13 @@ export function SchemaBooleanField({ field, value, onChange }: SchemaFieldProps)
   )
 }
 
-export function SchemaObjectField({ field, value, onChange }: SchemaFieldProps) {
+export function DinamicFieldForObject({ field, value, onChange }: DinamicFieldForProps) {
   const obj = (value as Record<string, unknown>) ?? {}
 
   const content = (
     <div className="flex flex-col gap-3">
       {field.children?.map((child) => (
-        <SchemaField
+        <DinamicField
           key={child.id}
           field={child}
           value={obj[child.name] ?? createDefaultValue(child)}
@@ -152,7 +110,7 @@ export function SchemaObjectField({ field, value, onChange }: SchemaFieldProps) 
   )
 }
 
-export function SchemaArrayField({ field, value, onChange }: SchemaFieldProps) {
+export function DinamicFieldForArray({ field, value, onChange }: DinamicFieldForProps) {
   const modalActionsContext = useRef<IModalController>(null)
   let items: any[] = []
   let itemField: OperationField | null = null
@@ -172,7 +130,7 @@ export function SchemaArrayField({ field, value, onChange }: SchemaFieldProps) {
       <div key={index} className="flex gap-2 items-end">
         <div className="flex-1">
           {isObjectArray(field) ? (
-            <SchemaField
+            <DinamicField
               field={itemField!}
               value={item}
               onChange={(next) => {
@@ -295,7 +253,7 @@ export function SchemaArrayField({ field, value, onChange }: SchemaFieldProps) {
   )
 }
 
-export function SchemaStringField({ field, value, onChange }: SchemaFieldProps) {
+export function DinamicFieldForString({ field, value, onChange }: DinamicFieldForProps) {
   const inputType = resolveInputType(field)
 
   const label = (
@@ -312,8 +270,10 @@ export function SchemaStringField({ field, value, onChange }: SchemaFieldProps) 
   if ((field.maxLength ?? 0) > 200) {
     return (
       <InputRoot>
-        {label}
-        {description}
+        <Label>
+          {label}
+          {description}
+        </Label>
         <TextArea
           value={String(value ?? '')}
           onChange={(v) => onChange(v)}
@@ -325,8 +285,10 @@ export function SchemaStringField({ field, value, onChange }: SchemaFieldProps) 
 
   return (
     <InputRoot>
-      {label}
-      {description}
+      <Label>
+        {label}
+        {description}
+      </Label>
       <Text
         disabled={field.readOnly}
         type={inputType}
@@ -336,11 +298,13 @@ export function SchemaStringField({ field, value, onChange }: SchemaFieldProps) 
 
           if (field.type === 'integer') {
             onChange(inputValue === '' ? '' : parseInt(inputValue, 10))
+
             return
           }
 
           if (field.type === 'number') {
             onChange(inputValue === '' ? '' : parseFloat(inputValue))
+
             return
           }
 
@@ -352,26 +316,26 @@ export function SchemaStringField({ field, value, onChange }: SchemaFieldProps) 
   )
 }
 
-export function SchemaField({ field, value, onChange, fieldParent }: SchemaFieldProps) {
-  if(field.render === false) {
+export function DinamicField({ field, value, onChange, fieldParent }: DinamicFieldForProps) {
+  if (field.render === false) {
     return null
   }
-  
+
   if (field.enumValues?.length) {
-    return <SchemaEnumField field={field} value={value} onChange={onChange} fieldParent={fieldParent} />
+    return <DinamicFieldForEnum field={field} value={value} onChange={onChange} fieldParent={fieldParent} />
   }
 
   if (field.type === 'boolean') {
-    return <SchemaBooleanField field={field} value={value} onChange={onChange} fieldParent={fieldParent} />
+    return <DinamicFieldForBoolean field={field} value={value} onChange={onChange} fieldParent={fieldParent} />
   }
 
   if (field.type === 'object') {
-    return <SchemaObjectField field={field} value={value} onChange={onChange} fieldParent={fieldParent} />
+    return <DinamicFieldForObject field={field} value={value} onChange={onChange} fieldParent={fieldParent} />
   }
 
   if (field.type === 'array') {
-    return <SchemaArrayField field={field} value={value} onChange={onChange} fieldParent={fieldParent} />
+    return <DinamicFieldForArray field={field} value={value} onChange={onChange} fieldParent={fieldParent} />
   }
 
-  return <SchemaStringField field={field} value={value} onChange={onChange} fieldParent={fieldParent} />
+  return <DinamicFieldForString field={field} value={value} onChange={onChange} fieldParent={fieldParent} />
 }

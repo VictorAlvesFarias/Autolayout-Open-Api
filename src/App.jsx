@@ -4,7 +4,7 @@ import { ToastContainer } from 'react-toastify'
 import 'react-toastify/dist/ReactToastify.css'
 import { AuthProvider } from './context/auth-context'
 import { OpenApiProvider } from './context/openapi-context'
-import UserRouters from './containers/app-shell'
+import Layout from './containers/layout'
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 
 
@@ -15,7 +15,7 @@ function App() {
         <OpenApiProvider>
           <ToastContainer theme="dark" position="top-right" />
           <Routes>
-            <Route path="/*" element={<UserRouters />} />
+            <Route path="/*" element={<Layout />} />
           </Routes>
         </OpenApiProvider>
       </AuthProvider>

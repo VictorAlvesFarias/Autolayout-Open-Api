@@ -1,5 +1,4 @@
-import type { ApiOperation, FieldGroup } from '../../types/operation'
-import { getDefaultForSchema } from './default-values'
+import type { FieldGroup, OperationEndpoint, OperationField } from '../../types/operation'
 
 export interface GetBaseUrlArgs {
   specUrl: string
@@ -8,7 +7,7 @@ export interface GetBaseUrlArgs {
 
 export interface BuildRequestUrlArgs {
   baseUrl: string
-  operation: ApiOperation | null
+  endpoint: OperationEndpoint
   values: Record<FieldGroup, Record<string, unknown>>
 }
 
@@ -19,7 +18,7 @@ export interface AppendQueryParamsArgs {
 }
 
 export interface CreateInitialFormValuesArgs {
-  operation: ApiOperation
+  endpoint: OperationEndpoint
 }
 
 export interface SetNestedValueArgs {
@@ -42,41 +41,70 @@ export function getBaseUrl(args: GetBaseUrlArgs): string {
 }
 
 export function buildRequestUrl(args: BuildRequestUrlArgs): string {
-  let path = args.operation?.path
+  let path = args.endpoint.operationPath
 
   for (const [key, value] of Object.entries(args.values.path)) {
-    if (value === undefined || value === null || value === '') {
-      continue
-    }
-
-    let encodedValue: string
-
-    if (typeof value === 'object') {
-      encodedValue = JSON.stringify(value)
-    } else {
-      encodedValue = String(value)
-    }
-
-    path = path?.replace(
-      `{${key}}`,
-      encodeURIComponent(encodedValue),
-    )
+    if (value === undefined || value === null || value === '') continue
+    const encodedValue = typeof value === 'object' ? JSON.stringify(value) : String(value)
+    path = path?.replace(`{${key}}`, encodeURIComponent(encodedValue))
   }
 
   let baseUrl = args.baseUrl
-
-  if (!baseUrl.endsWith('/')) {
-    baseUrl = `${baseUrl}/`
-  }
+  if (!baseUrl.endsWith('/')) baseUrl = `${baseUrl}/`
 
   const url = new URL(path ?? '', baseUrl)
-
-  appendQueryParams({
-    url,
-    obj: args.values.query,
-  })
+  appendQueryParams({ url, obj: args.values.query })
 
   return url.toString()
+}
+
+export function walkFieldDefaults(field: OperationField, target: Record<string, unknown>): void {
+  if (field.type === 'object' && field.children?.length) {
+
+    const nested: Record<string, unknown> = {}
+    
+    for (const child of field.children) {
+      walkFieldDefaults(child, nested)
+    }
+    
+    if (Object.keys(nested).length > 0) {
+      target[field.name] = nested
+    }
+    
+    return
+  }
+
+  if (field.type === 'array') {
+    target[field.name] = field.defaultValue ?? []
+
+    return
+  }
+
+  if (field.defaultValue !== undefined) {
+    target[field.name] = field.defaultValue
+    
+    return
+  }
+
+  if (field.example !== undefined) {
+    target[field.name] = field.example
+    
+    return
+  }
+
+  if (field.type === 'boolean') {
+    target[field.name] = false
+    
+    return
+  }
+
+  if (field.type === 'integer' || field.type === 'number') {
+    target[field.name] = 0
+    
+    return
+  }
+
+  target[field.name] = ''
 }
 
 export function createInitialFormValues(args: CreateInitialFormValuesArgs): Record<FieldGroup, Record<string, unknown>> {
@@ -89,47 +117,14 @@ export function createInitialFormValues(args: CreateInitialFormValuesArgs): Reco
     responses: {},
   }
 
-  for (const param of args?.operation?.parameters ?? []) {
-    const bucket = values[param.in]
+  for (const field of args.endpoint.fields) {
+    const group = field.group as FieldGroup
 
-    let defaultVal = param.example
-
-    if (defaultVal === undefined) {
-      if (param.examples) {
-        defaultVal = Object.values(param.examples)[0]?.value
-      }
+    if (!values[group]) {
+      continue
     }
 
-    if (defaultVal === undefined) {
-      defaultVal = getDefaultForSchema({
-        schema: param.schema,
-      })
-    }
-
-    const segments = param.name.split('.')
-
-    if (segments.length === 1) {
-      bucket[param.name] = defaultVal
-    }
-    else {
-      setNestedValue({
-        target: bucket,
-        segments,
-        value: defaultVal,
-      })
-    }
-  }
-
-  if (args?.operation?.requestBody?.contents?.length) {
-    const first = args.operation.requestBody.contents[0]
-
-    const bodyDefault = getDefaultForSchema({
-      schema: first.schema
-    })
-
-    if (bodyDefault && typeof bodyDefault === 'object') {
-      Object.assign(values.body, bodyDefault as object)
-    }
+    walkFieldDefaults(field, values[group])
   }
 
   return values
@@ -137,48 +132,24 @@ export function createInitialFormValues(args: CreateInitialFormValuesArgs): Reco
 
 export function appendQueryParams(args: AppendQueryParamsArgs): void {
   for (const [key, value] of Object.entries(args.obj)) {
+    if (value === undefined || value === null || value === '') continue
 
-    if (value === undefined || value === null || value === '') {
-      continue
-    }
-
-    let fullKey = key
-
-    if (args.prefix) {
-      fullKey = `${args.prefix}.${key}`
-    }
+    const fullKey = args.prefix ? `${args.prefix}.${key}` : key
 
     if (Array.isArray(value)) {
       value.forEach((item, index) => {
-        if (item === undefined || item === null) {
-          return
-        }
-
+        if (item === undefined || item === null) return
         if (typeof item === 'object') {
-          appendQueryParams({
-            url: args.url,
-            obj: item as Record<string, unknown>,
-            prefix: `${fullKey}[${index}]`,
-          })
-        }
-        else {
-          args.url.searchParams.append(
-            fullKey,
-            String(item),
-          )
+          appendQueryParams({ url: args.url, obj: item as Record<string, unknown>, prefix: `${fullKey}[${index}]` })
+        } else {
+          args.url.searchParams.append(fullKey, String(item))
         }
       })
-
       continue
     }
 
     if (typeof value === 'object') {
-      appendQueryParams({
-        url: args.url,
-        obj: value as Record<string, unknown>,
-        prefix: fullKey,
-      })
-
+      appendQueryParams({ url: args.url, obj: value as Record<string, unknown>, prefix: fullKey })
       continue
     }
 

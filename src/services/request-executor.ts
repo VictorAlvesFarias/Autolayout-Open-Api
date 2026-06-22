@@ -1,11 +1,11 @@
 import axios, { type AxiosRequestConfig } from 'axios'
 import type { AuthState } from '../types/auth'
-import type { ApiOperation, ApiResponseResult, FieldGroup } from '../types/operation'
+import type { ApiResponseResult, FieldGroup, OperationEndpoint } from '../types/operation'
 import { buildRequestUrl } from '../utils/openapi/build-url'
 
 export interface ExecuteRequestArgs {
   baseUrl: string
-  operation: ApiOperation
+  endpoint: OperationEndpoint
   values: Record<FieldGroup, Record<string, unknown>>
   auth: AuthState
 }
@@ -17,8 +17,8 @@ export interface ApplyAuthArgs {
 }
 
 export async function executeRequest(args: ExecuteRequestArgs): Promise<ApiResponseResult> {
-  const { baseUrl, operation, values, auth } = args
-  const url = buildRequestUrl({ baseUrl, operation, values })
+  const { baseUrl, endpoint, values, auth } = args
+  const url = buildRequestUrl({ baseUrl, endpoint, values })
   const headers: Record<string, string> = {}
 
   for (const [key, value] of Object.entries(values.header)) {
@@ -30,13 +30,15 @@ export async function executeRequest(args: ExecuteRequestArgs): Promise<ApiRespo
   applyAuth({ headers, values, auth })
 
   const config: AxiosRequestConfig = {
-    method: operation.method,
+    method: endpoint.method,
     url,
     headers,
     validateStatus: () => true,
   }
 
-  if (operation.requestBody && values.body !== undefined) {
+  const hasBody = endpoint.fields.some(f => f.group === 'body')
+
+  if (hasBody && values.body !== undefined) {
     const contentType = 'application/json'
 
     headers['Content-Type'] = contentType
@@ -49,7 +51,7 @@ export async function executeRequest(args: ExecuteRequestArgs): Promise<ApiRespo
 
       if (typeof values.body === 'object' && values.body !== null) {
         Object.entries(values.body as Record<string, string>).forEach(([k, v]) =>
-          params.set(k, String(v)),
+          params.set(k, String(v))
         )
       }
 
@@ -65,39 +67,33 @@ export async function executeRequest(args: ExecuteRequestArgs): Promise<ApiRespo
   const responseHeaders: Record<string, string> = {}
 
   Object.entries(response.headers).forEach(([k, v]) => {
-    if (typeof v === 'string') {
-      responseHeaders[k] = v
-    }
+    if (typeof v === 'string') responseHeaders[k] = v
   })
 
-  const result = {
+  return {
     status: response.status,
     statusText: response.statusText,
     headers: responseHeaders,
     data: response.data,
     durationMs: Math.round(performance.now() - start),
   }
-
-  return result
-
 }
 
 export function applyAuth(args: ApplyAuthArgs): void {
   const { headers, values, auth } = args
 
-  if (auth?.type == 'bearer') {
+  if (auth?.type === 'bearer') {
     if (auth.bearerToken) {
       headers.Authorization = `Bearer ${auth.bearerToken}`
     }
   }
-  else if (auth?.type == 'basic') {
+  else if (auth?.type === 'basic') {
     if (auth.basicUsername || auth.basicPassword) {
       const encoded = btoa(`${auth.basicUsername}:${auth.basicPassword}`)
       headers.Authorization = `Basic ${encoded}`
     }
   }
-  else if (auth?.type == 'apiKey') {
-
+  else if (auth?.type === 'apiKey') {
     if (auth.apiKeyName && auth.apiKeyValue) {
       if (auth.apiKeyIn === 'header') {
         headers[auth.apiKeyName] = auth.apiKeyValue

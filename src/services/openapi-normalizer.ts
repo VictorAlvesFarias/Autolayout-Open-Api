@@ -1,5 +1,15 @@
 import type { OpenAPIV3 } from 'openapi-types'
-import type { ActionBind, ApiOperation, ApiParameter, ApiRequestBody, EndpointConfig, FieldGroup, FieldType, OperationEndpoint, OperationField } from '../types/operation'
+import type {
+  ActionBind,
+  ApiOperation,
+  ApiParameter,
+  ApiRequestBody,
+  EndpointConfig,
+  FieldGroup,
+  FieldType,
+  OperationEndpoint,
+  OperationField,
+} from '../types/operation'
 import { setNestedValue } from '../utils/openapi/build-url'
 
 export interface FieldPatchRule {
@@ -15,6 +25,11 @@ export interface CreateFieldOptions {
   description?: string
   example?: unknown
   contentType?: string
+}
+
+export function toReactRouterPath(operationPath: string, method: string): string {
+  const converted = operationPath.replace(/\{([^}]+)\}/g, ':$1')
+  return `/${method}${converted}`
 }
 
 export function resolveBind(
@@ -42,14 +57,31 @@ export function resolveBind(
 }
 
 export function resolveEndpoints(operations: ApiOperation[], configMap: EndpointConfig[]): OperationEndpoint[] {
-  return operations.map((op) => {
+  const endpoints: OperationEndpoint[] = operations.map((op) => {
     const config = configMap.find((c) => c.operationId === op.id)
     const fields = normalizeOperation(op, config?.rules ?? [])
 
-    const actions = (config?.actions ?? []).flatMap((actionConfig) => {
-      const targetOp = operations.find((o) => o.id === actionConfig.targetOperationId)
+    return {
+      id: op.id,
+      method: op.method,
+      operationPath: op.path,
+      routePath: toReactRouterPath(op.path, op.method),
+      fields,
+      actions: [],
+      render: config?.render ?? true,
+      runOnInit: config?.runOnInit ?? false,
+      returnBind: config?.returnBind,
+      searchInputId: config?.searchInputId,
+    }
+  })
 
-      if (!targetOp) {
+  for (const endpoint of endpoints) {
+    const config = configMap.find((c) => c.operationId === endpoint.id)
+
+    endpoint.actions = (config?.actions ?? []).flatMap((actionConfig) => {
+      const targetEndpoint = endpoints.find((e) => e.id === actionConfig.targetOperationId)
+
+      if (!targetEndpoint) {
         return []
       }
 
@@ -59,58 +91,90 @@ export function resolveEndpoints(operations: ApiOperation[], configMap: Endpoint
         label: actionConfig.label,
         path: actionConfig.path,
         operationId: actionConfig.targetOperationId,
-        operation: targetOp,
+        endpoint: targetEndpoint,
         bind: actionConfig.bind,
         returnBind: actionConfig.returnBind,
-        render: config?.render ?? true,
-        runOnInit: config?.runOnInit ?? false,
+        searchInputId: config?.searchInputId,
       }]
     })
 
-    return {
-      id: op.id,
-      method: op.method,
-      operationPath: op.path,
-      fields,
-      actions,
-      render: config?.render ?? true,
-      runOnInit: config?.runOnInit ?? false,
-    }
-  })
+    endpoint.paginationFieldsConfigs = (config?.paginationFieldsConfigs ?? []).flatMap((conf) => {
+      if (!conf) {
+        return []
+      }
+
+      return [{
+        currentPageFieldId: conf.currentPageFieldId,
+        totalPagesFieldId: conf.totalPagesFieldId,
+        operationFieldId: conf.operationFieldId,
+      }]
+    })
+  }
+
+  return endpoints
 }
 
-// 1. Função auxiliar que aplica UMA única regra na árvore inteira (e seus filhos)
-function applyRuleToTree(field: OperationField, rule: FieldPatchRule, parent?: OperationField): OperationField {
+export function getMissingRequiredParams(
+  endpoint: OperationEndpoint,
+  values: Record<FieldGroup, Record<string, unknown>>
+): string[] {
+  const missing: string[] = []
+
+  function walk(field: OperationField): void {
+    if (!field.required) return
+
+    const groupValues = values[field.group] ?? {}
+    const val = field.path.reduce<unknown>(
+      (acc, key) => (acc as Record<string, unknown>)?.[key],
+      groupValues
+    )
+
+    if (val === undefined || val === null || val === '') {
+      missing.push(field.id)
+    }
+  }
+
+  function walkTree(fields: OperationField[]): void {
+    for (const field of fields) {
+      walk(field)
+      if (field.children?.length) walkTree(field.children)
+    }
+  }
+
+  walkTree(endpoint.fields.filter(f => f.group !== 'responses'))
+
+  return missing
+}
+
+export function applyRuleToTree(
+  field: OperationField,
+  rule: FieldPatchRule,
+  parent?: OperationField
+): OperationField {
   let result = field
 
-  // Aplica a regra no nó atual
   if (rule.match(result, parent)) {
     result = typeof rule.patch === 'function'
       ? rule.patch(result, parent)
       : { ...result, ...rule.patch }
   }
 
-  // Aplica a mesma regra recursivamente nos filhos
   if (result.children?.length) {
     result = {
       ...result,
-      children: result.children.map(child => applyRuleToTree(child, rule, result))
+      children: result.children.map(child => applyRuleToTree(child, rule, result)),
     }
   }
 
   return result
 }
 
-// 2. Função principal que roda o Pipeline de regras
 export function applyPatch(field: OperationField, rules: FieldPatchRule[]): OperationField {
-  let currentTree = field
-
-  // Roda todas as regras, uma por vez, passando a árvore inteira por cada uma
+  let current = field
   for (const rule of rules) {
-    currentTree = applyRuleToTree(currentTree, rule)
+    current = applyRuleToTree(current, rule)
   }
-
-  return currentTree
+  return current
 }
 
 export function normalizeOperation(operation: ApiOperation, rules: FieldPatchRule[] = []): OperationField[] {
@@ -138,8 +202,16 @@ export function normalizeOperation(operation: ApiOperation, rules: FieldPatchRul
 }
 
 export function normalizeValue(value: unknown): unknown {
-  if (typeof value !== 'string') return value
-  try { return JSON.parse(value) } catch { return value }
+  if (typeof value !== 'string') {
+    return value
+  }
+
+  try {
+    return JSON.parse(value)
+  }
+  catch {
+    return value
+  }
 }
 
 export function formatValue(value: unknown): string {
@@ -218,23 +290,17 @@ export function insertParameter(fields: OperationField[], parameter: ApiParamete
 
 export function normalizeRequestBody(requestBody: ApiRequestBody): OperationField[] {
   const fields: OperationField[] = []
-
   for (const content of requestBody.contents.filter(c => c.contentType === 'application/json')) {
     const schema = content.schema
-
     if (schema.type === 'object' && schema.properties) {
       for (const [propertyName, propertySchema] of Object.entries(schema.properties)) {
-        if ('$ref' in propertySchema) {
-          continue
-        }
-
+        if ('$ref' in propertySchema) continue
         fields.push(
           walkSchema(propertySchema, 'body', [propertyName], schema.required?.includes(propertyName) ?? false, content.contentType)
         )
       }
     }
   }
-
   return fields
 }
 
@@ -244,34 +310,24 @@ export function walkSchema(schema: OpenAPIV3.SchemaObject, group: FieldGroup, pa
 
   if (schema.type === 'object' && schema.properties) {
     for (const [propertyName, propertySchema] of Object.entries(schema.properties)) {
-      if ('$ref' in propertySchema) {
-        continue
-      }
-
+      if ('$ref' in propertySchema) continue
       children.push(walkSchema(propertySchema, group, [...path, propertyName], schema.required?.includes(propertyName) ?? false, contentType))
     }
   }
 
   if (schema.type === 'array' && schema.items && !('$ref' in schema.items)) {
     const item = schema.items
-
     if (item.type === 'object' && item.properties) {
       for (const [propertyName, propertySchema] of Object.entries(item.properties)) {
-        if ('$ref' in propertySchema) {
-          continue
-        }
-
+        if ('$ref' in propertySchema) continue
         children.push(walkSchema(propertySchema, group, [...path, propertyName], item.required?.includes(propertyName) ?? false, contentType))
       }
-    }
-    else {
+    } else {
       children.push(walkSchema(item, group, [...path, '*'], false, contentType))
     }
   }
 
-  if (children.length > 0) {
-    field.children = children
-  }
+  if (children.length > 0) field.children = children
 
   return field
 }
@@ -343,4 +399,85 @@ export function humanize(value: string): string {
     .replace(/([a-z])([A-Z])/g, '$1 $2')
     .replace(/[-_]/g, ' ')
     .replace(/^\w/, c => c.toUpperCase())
+}
+
+export function createDefaultValue(field?: OperationField): unknown {
+  if (!field) {
+    return ''
+  }
+
+  if (field.defaultValue !== undefined) {
+    return field.defaultValue
+  }
+
+  if (field.type === 'array') {
+    return []
+  }
+
+  if (field.type === 'object') {
+    return Object.fromEntries(
+      (field.children ?? []).map(child => [
+        child.name,
+        createDefaultValue(child),
+      ])
+    )
+  }
+
+  if (field.type === 'boolean') {
+    return false
+  }
+
+  if (field.type === 'integer' || field.type === 'number') {
+    return 0
+  }
+
+  return ''
+}
+
+export function resolveInputType(field: OperationField): string {
+  if (field.format === 'password') {
+    return 'password'
+  }
+
+  if (field.format === 'email') {
+    return 'email'
+  }
+
+  if (field.format === 'date') {
+    return 'date'
+  }
+
+  if (field.format === 'date-time') {
+    return 'datetime-local'
+  }
+
+  if (field.type === 'integer' || field.type === 'number') {
+    return 'number'
+  }
+
+  return 'text'
+}
+
+export function fieldExists(id: string | null | undefined, ops: OperationField[]): OperationField | undefined {
+  const path = id ? id.split('.').splice(1) : []
+
+  for (let index = 0; index < path.length; index++) {
+    const element = path[index]
+
+    for (const op of ops) {
+      if (op.name === element) {
+        if (index === path.length - 1) {
+          return op
+        }
+
+        if (op.children) {
+          const child = fieldExists(path.slice(index + 1).join('.'), op.children)
+
+          if (child) {
+            return child
+          }
+        }
+      }
+    }
+  }
 }
