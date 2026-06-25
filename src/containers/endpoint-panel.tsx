@@ -1,5 +1,5 @@
 import { useContext, useEffect, useRef, useState } from 'react'
-import { ConditionalGroup, If, IModalController, ModalClose, ModalContext } from 'react-base-components'
+import { If, IModalController, ModalClose, ModalContext } from 'react-base-components'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import Button from '../components/button'
 import Card from '../components/card'
@@ -10,10 +10,9 @@ import { executeRequest } from '../services/request-executor'
 import { createInitialFormValues, setNestedValue } from '../utils/openapi/build-url'
 import { DinamicField } from './dinamic-field'
 import { OpenApiContext } from '../context/openapi-context'
-import type { AuthType } from '../types/auth'
-import type { ActionBind, ApiResponseResult, FieldGroup, OperationEndpoint, OperationField } from '../types/operation'
+import type { ActionBind, FieldGroup, OperationEndpoint, OperationField } from '../types/operation'
 import { RotateCcw, SlidersHorizontal } from 'lucide-react'
-import { fieldExists, getMissingRequiredParams, resolveBind } from '../services/openapi-normalizer'
+import { fieldExists, getMissingRequiredParams, getValueByFieldId, resolveBind, splitFieldId } from '../services/openapi-normalizer'
 import { toast } from 'react-toastify'
 import { ToggleGroup, ToggleGroupButton } from '../components/toogle-group'
 import { ToggleGroupContext } from 'react-base-components'
@@ -43,12 +42,6 @@ export function EndpointPanel({ endpoint }: EndpointPanelProps) {
   const [values, setValues] = useState<Record<FieldGroup, Record<string, unknown>>>(() => createInitialFormValues({ endpoint }))
   const [responseCode, setResponseCode] = useState<string>(responses[0]?.name ?? 'none')
 
-  console.log(endpoint)
-
-  // -------------------------------------------------------------------------
-  // Request
-  // -------------------------------------------------------------------------
-
   async function sendRequest(formValues: Record<FieldGroup, Record<string, unknown>>) {
     if (!baseUrl || sending) {
       return
@@ -69,10 +62,6 @@ export function EndpointPanel({ endpoint }: EndpointPanelProps) {
       setSending(false)
     }
   }
-
-  // -------------------------------------------------------------------------
-  // Helpers
-  // -------------------------------------------------------------------------
 
   function buildNavigateArgs(targetRoutePath: string, boundValues: Record<FieldGroup, Record<string, unknown>>): [string, { state: unknown }] {
     let resolvedPath = targetRoutePath
@@ -139,21 +128,9 @@ export function EndpointPanel({ endpoint }: EndpointPanelProps) {
     )
   }
 
-  function onParamChange(location: FieldGroup, name: string, value: unknown) {
-    setValues((prev) => {
-      const currentValues = prev[location] && typeof prev[location] === 'object' ? prev[location] : {}
-      return { ...prev, [location]: { ...currentValues, [name]: value } }
-    })
-  }
+  function setFieldValue(id: string, value: unknown, timeout?: number): void {
+    const { group, path } = splitFieldId(id)
 
-  function getFieldValue(group: FieldGroup, path: string[]): unknown {
-    return path.reduce(
-      (acc, key) => (acc as Record<string, unknown>)?.[key],
-      values[group] as unknown
-    )
-  }
-
-  function setFieldValue(group: FieldGroup, path: string[], value: unknown, timeout?: number): void {
     function set(obj: Record<string, unknown>, [head, ...tail]: string[]): Record<string, unknown> {
       if (tail.length === 0) {
         return { ...obj, [head]: value }
@@ -177,10 +154,6 @@ export function EndpointPanel({ endpoint }: EndpointPanelProps) {
       sendRequest(next)
     }
   }
-
-  // -------------------------------------------------------------------------
-  // Init
-  // -------------------------------------------------------------------------
 
   function getInitialValues() {
     const initial = createInitialFormValues({ endpoint })
@@ -232,7 +205,6 @@ export function EndpointPanel({ endpoint }: EndpointPanelProps) {
       const missing = getMissingRequiredParams(action.endpoint, requestValues)
       if (missing.length > 0) {
         toast.error(`Parâmetros obrigatórios não preenchidos na action "${action.label}": ${missing.join(', ')}`)
-        console.warn('Parâmetros obrigatórios não preenchidos:', missing)
         return
       }
 
@@ -250,7 +222,6 @@ export function EndpointPanel({ endpoint }: EndpointPanelProps) {
     const missing = getMissingRequiredParams(endpoint, actionValues)
     if (missing.length > 0) {
       toast.error(`Parâmetros obrigatórios não preenchidos na requisição automática: ${missing.join(', ')}`)
-      console.warn('Parâmetros obrigatórios não preenchidos:', missing)
       return
     }
 
@@ -265,10 +236,6 @@ export function EndpointPanel({ endpoint }: EndpointPanelProps) {
     navigate(to, options)
   }
 
-  // -------------------------------------------------------------------------
-  // Effects
-  // -------------------------------------------------------------------------
-
   useEffect(() => {
     const initValue = getInitialValues()
     runInitAction(initValue)
@@ -276,18 +243,14 @@ export function EndpointPanel({ endpoint }: EndpointPanelProps) {
     setValues(initValue)
   }, [endpoint.id])
 
-  // -------------------------------------------------------------------------
-  // Render
-  // -------------------------------------------------------------------------
-
   return (
     <div className="flex flex-col gap-4">
       <div className="flex-1 flex items-end gap-3">
         {searchInputField && (
           <DinamicField
             field={searchInputField}
-            value={String(getFieldValue(searchInputField.group, searchInputField.path) ?? '')}
-            onChange={(v) => setFieldValue(searchInputField.group, searchInputField.path, v, 500)}
+            value={String(getValueByFieldId(values, searchInputField.id) ?? '')}
+            onChange={(v) => setFieldValue(searchInputField.id, v, 500)}
           />
         )}
 
@@ -328,8 +291,8 @@ export function EndpointPanel({ endpoint }: EndpointPanelProps) {
                       <DinamicField
                         key={`${group}_${i}`}
                         field={{ ...field, fieldset: parameters.length > 1 }}
-                        value={values?.[field.group]?.[field.name]}
-                        onChange={(next) => onParamChange(field.group, field.name, next)}
+                        value={getValueByFieldId(values, field.id)}
+                        onChange={(next) => setFieldValue(field.id, next)}
                       />
                     ))}
                   </Card>
@@ -347,8 +310,8 @@ export function EndpointPanel({ endpoint }: EndpointPanelProps) {
             <DinamicField
               key={`${i}`}
               field={{ ...field, fieldset: body.length > 1 }}
-              value={values?.[field.group]?.[field.name]}
-              onChange={(next) => onParamChange('body', field.name, next)}
+              value={getValueByFieldId(values, field.id)}
+              onChange={(next) => setFieldValue(field.id, next)}
             />
           ))}
         </Card>
@@ -387,14 +350,11 @@ export function EndpointPanel({ endpoint }: EndpointPanelProps) {
                 <StaticField
                   key={i}
                   field={{ ...responseField, fieldset: startFieldset }}
-                  value={values?.[responseField.group]?.[responseField.name]}
-                  actions={endpoint.actions}
+                  value={getValueByFieldId(values, responseField.id)}
                   baseUrl={baseUrl}
                   auth={auth}
-                  fieldPath={responseField.id}
-                  paginationConfigs={endpoint.paginationFieldsConfigs}
                   values={values}
-                  onPageChange={(group, path, page) => setFieldValue(group, path, page)}
+                  onPageChange={(fieldId, page) => setFieldValue(fieldId, page)}
                   onPostback={() => sendRequest(values)}
                   onNavigate={handleActionNavigate}
                 />

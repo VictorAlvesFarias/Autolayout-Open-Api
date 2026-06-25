@@ -42,6 +42,8 @@ export interface OperationField {
   writeOnly?: boolean
   fieldset: boolean
   render: boolean
+  actions?: ResolvedAction[]
+  paginationConfig?: PaginationFieldsConfig
 }
 
 export interface ActionBind {
@@ -62,9 +64,9 @@ export interface ResolvedAction {
 }
 
 export interface PaginationFieldsConfig {
-  currentPageFieldId: string  // e.g. 'query.CurrentPage'
-  totalPagesFieldId: string   // e.g. 'responses.200.totalPages'
-  operationFieldId: string    // e.g. 'responses.200.items'
+  currentPageFieldId: string
+  totalPagesFieldId: string
+  operationFieldId: string
 }
 
 export interface OperationEndpoint {

@@ -78,7 +78,7 @@ export function resolveEndpoints(operations: ApiOperation[], configMap: Endpoint
   for (const endpoint of endpoints) {
     const config = configMap.find((c) => c.operationId === endpoint.id)
 
-    endpoint.actions = (config?.actions ?? []).flatMap((actionConfig) => {
+    const resolvedActions = (config?.actions ?? []).flatMap((actionConfig) => {
       const targetEndpoint = endpoints.find((e) => e.id === actionConfig.targetOperationId)
 
       if (!targetEndpoint) {
@@ -98,17 +98,23 @@ export function resolveEndpoints(operations: ApiOperation[], configMap: Endpoint
       }]
     })
 
-    endpoint.paginationFieldsConfigs = (config?.paginationFieldsConfigs ?? []).flatMap((conf) => {
-      if (!conf) {
-        return []
-      }
+    endpoint.actions = resolvedActions
 
-      return [{
-        currentPageFieldId: conf.currentPageFieldId,
-        totalPagesFieldId: conf.totalPagesFieldId,
-        operationFieldId: conf.operationFieldId,
-      }]
-    })
+    for (const action of resolvedActions.filter((item) => item.type !== 'init')) {
+      const field = findOperationField(action.path, endpoint.fields)
+
+      if (field) {
+        field.actions = [...(field.actions ?? []), action]
+      }
+    }
+
+    for (const paginationConfig of config?.paginationFieldsConfigs ?? []) {
+      const field = findOperationField(paginationConfig.operationFieldId, endpoint.fields)
+
+      if (field) {
+        field.paginationConfig = paginationConfig
+      }
+    }
   }
 
   return endpoints
@@ -123,11 +129,7 @@ export function getMissingRequiredParams(
   function walk(field: OperationField): void {
     if (!field.required) return
 
-    const groupValues = values[field.group] ?? {}
-    const val = field.path.reduce<unknown>(
-      (acc, key) => (acc as Record<string, unknown>)?.[key],
-      groupValues
-    )
+    const val = getValueByFieldId(values, field.id)
 
     if (val === undefined || val === null || val === '') {
       missing.push(field.id)
@@ -278,7 +280,7 @@ export function insertParameter(fields: OperationField[], parameter: ApiParamete
       field = {
         id: `${parameter.in}.${segments.slice(0, i + 1).join('.')}`,
         group: parameter.in,
-        path: segments.slice(0, i + 1),
+        path: [parameter.in, ...segments.slice(0, i + 1)],
         depth: i,
         name: segment,
         label: segment,
@@ -349,12 +351,13 @@ export function createField(options: CreateFieldOptions): OperationField {
   const name = options.path[options.path.length - 1]
   const type = resolveType(options.schema)
   const label = name === '*' ? 'Item' : options.schema.title ?? humanize(name)
+  const fullPath = [options.group, ...options.path]
 
   return {
-    id: `${options.group}.${options.path.join('.')}`,
+    id: fullPath.join('.'),
     fieldset: true,
     group: options.group,
-    path: options.path,
+    path: fullPath,
     depth: options.path.length - 1,
     name, label, type,
     renderMode: type === 'object' ? 'section' : 'field',
@@ -472,25 +475,38 @@ export function resolveInputType(field: OperationField): string {
 }
 
 export function fieldExists(id: string | null | undefined, ops: OperationField[]): OperationField | undefined {
-  const path = id ? id.split('.').splice(1) : []
+  if (!id) {
+    return undefined
+  }
 
-  for (let index = 0; index < path.length; index++) {
-    const element = path[index]
+  return findOperationField(id, ops)
+}
 
-    for (const op of ops) {
-      if (op.name === element) {
-        if (index === path.length - 1) {
-          return op
-        }
+export function splitFieldId(id: string): { group: FieldGroup; path: string[] } {
+  const [group, ...path] = id.split('.')
 
-        if (op.children) {
-          const child = fieldExists(path.slice(index + 1).join('.'), op.children)
+  return { group: group as FieldGroup, path }
+}
 
-          if (child) {
-            return child
-          }
-        }
-      }
+export function getValueByFieldId(values: Record<FieldGroup, Record<string, unknown>>, id: string): unknown {
+  const { group, path } = splitFieldId(id)
+
+  return path.reduce<unknown>(
+    (acc, key) => (acc as Record<string, unknown>)?.[key],
+    values[group] as unknown
+  )
+}
+
+export function findOperationField(id: string, fields: OperationField[]): OperationField | undefined {
+  for (const field of fields) {
+    if (field.id === id) {
+      return field
+    }
+
+    if (field.children?.length) {
+      const child = findOperationField(id, field.children)
+
+      if (child) return child
     }
   }
 }

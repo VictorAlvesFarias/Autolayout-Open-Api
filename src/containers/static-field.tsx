@@ -8,9 +8,11 @@ import Button from '../components/button'
 import Card from '../components/card'
 import Checkbox from '../components/checkbox'
 import InputRoot from '../components/input-root'
-import Text from '../components/input-text'
 import Label from '../components/label'
 import ModalRoot from '../components/modal-root'
+import Text from '../components/input-text'
+import type { AuthState } from '../types/auth'
+import type { FieldGroup, OperationField, ResolvedAction } from '../types/operation'
 import {
   findResponsePanelTableLabel,
   findResponsePanelTableValues,
@@ -23,81 +25,59 @@ import {
 } from '../services/openapi-normalizer'
 import { executeRequest } from '../services/request-executor'
 import { PaginationPanel } from './pagination-panel'
-import type { FieldGroup, OperationField, PaginationFieldsConfig, ResolvedAction } from '../types/operation'
-import type { AuthState } from '../types/auth'
 import { toast } from 'react-toastify'
-
-// ---------------------------------------------------------------------------
-// Interfaces
-// ---------------------------------------------------------------------------
 
 export interface StaticFieldProps {
   field: OperationField
   value: unknown
-  actions?: ResolvedAction[]
   baseUrl?: string
   auth?: AuthState
-  fieldPath?: string
-  paginationConfigs?: PaginationFieldsConfig[]
   values?: Record<FieldGroup, Record<string, unknown>>
-  onPageChange?: (group: FieldGroup, path: string[], value: unknown) => void
+  onPageChange?: (fieldId: string, value: unknown) => void
   onPostback?: () => void
   onNavigate?: (routePath: string, boundValues: Record<FieldGroup, Record<string, unknown>>) => void
 }
 
-// ---------------------------------------------------------------------------
-// useFieldActions
-// ---------------------------------------------------------------------------
+export interface FieldActionsProps {
+  field: OperationField
+  item: unknown
+  baseUrl?: string
+  auth?: AuthState
+  onPostback?: () => void
+  onNavigate?: StaticFieldProps['onNavigate']
+}
 
-function useFieldActions(
-  actions: ResolvedAction[] | undefined,
-  fieldPath: string | undefined,
-  baseUrl: string | undefined,
-  auth: AuthState | undefined,
-  onPostback: (() => void) | undefined,
-  onNavigate: StaticFieldProps['onNavigate'],
-) {
-  const localActions = (actions ?? []).filter((a) => a.path === fieldPath)
-  const hasActions = localActions.length > 0
-
+export function FieldActions({ field, item, baseUrl, auth, onPostback, onNavigate }: FieldActionsProps) {
+  const actions = field.actions ?? []
   const modalActionsRef = useRef<IModalController>(null)
   const modalResultRef = useRef<IModalController>(null)
   const [actionResult, setActionResult] = useState<{ action: ResolvedAction; data: unknown } | null>(null)
   const [runningAction, setRunningAction] = useState(false)
-  const [activeItem, setActiveItem] = useState<unknown>(null)
 
   async function runAction(action: ResolvedAction) {
     if (runningAction) return
 
-    const item = (activeItem ?? {}) as Record<string, unknown>
-    const boundValues = resolveBind(action.bind, item)
+    const boundValues = resolveBind(action.bind, (item ?? {}) as Record<string, unknown>)
+    const missing = getMissingRequiredParams(action.endpoint, boundValues)
+
+    if (missing.length > 0) {
+      toast.error(`ParÃ¢metros obrigatÃ³rios nÃ£o preenchidos na action "${action.label}": ${missing.join(', ')}`)
+      return
+    }
 
     if (action.type === 'navigate') {
-      const missing = getMissingRequiredParams(action.endpoint, boundValues)
-      if (missing.length > 0) {
-        toast.error(`Parâmetros obrigatórios não preenchidos na action "${action.label}": ${missing.join(', ')}`)
-        console.warn('Parâmetros obrigatórios não preenchidos:', missing)
-        return
-      }
       const routePath = toReactRouterPath(action.endpoint.operationPath, action.endpoint.method)
       onNavigate?.(routePath, boundValues)
       modalActionsRef.current?.close()
       return
     }
 
-    if (!baseUrl) return
-
-    const missing = getMissingRequiredParams(action.endpoint, boundValues)
-    if (missing.length > 0) {
-      toast.error(`Parâmetros obrigatórios não preenchidos na action "${action.label}": ${missing.join(', ')}`)
-      console.warn('Parâmetros obrigatórios não preenchidos:', missing)
-      return
-    }
+    if (!baseUrl || !auth) return
 
     setRunningAction(true)
 
     try {
-      const result = await executeRequest({ baseUrl, endpoint: action.endpoint, values: boundValues, auth: auth! })
+      const result = await executeRequest({ baseUrl, endpoint: action.endpoint, values: boundValues, auth })
       setActionResult({ action, data: result.data })
       modalActionsRef.current?.close()
 
@@ -111,8 +91,14 @@ function useFieldActions(
     }
   }
 
-  const modals = hasActions ? (
+  if (actions.length === 0) return null
+
+  return (
     <>
+      <Button type="button" variation="icon" onClick={(e) => { e.stopPropagation(); modalActionsRef.current?.open() }}>
+        <Grip className="w-5 h-5" />
+      </Button>
+
       <ModalContext ref={modalActionsRef}>
         <ModalRoot>
           <div className="w-full h-full flex items-center justify-center">
@@ -123,7 +109,7 @@ function useFieldActions(
                   <ModalClose><Button type="button">Close</Button></ModalClose>
                 </div>
                 <div className="flex flex-col gap-2">
-                  {localActions.map((action, i) => (
+                  {actions.map((action, i) => (
                     <Button
                       key={i}
                       type="button"
@@ -173,7 +159,7 @@ function useFieldActions(
                 </div>
                 {actionResult && (
                   <StaticField
-                    field={actionResult.action.endpoint?.fields?.[0] as unknown as OperationField}
+                    field={actionResult.action.endpoint?.fields?.[0] as OperationField}
                     value={actionResult.data}
                   />
                 )}
@@ -183,24 +169,12 @@ function useFieldActions(
         </ModalRoot>
       </ModalContext>
     </>
-  ) : null
-
-  function openActions(item: unknown) {
-    setActiveItem(item)
-    modalActionsRef.current?.open()
-  }
-
-  return { hasActions, modals, openActions }
+  )
 }
 
-// ---------------------------------------------------------------------------
-// StaticFieldForObject
-// ---------------------------------------------------------------------------
-
-export function StaticFieldForObject({ field, value, actions, baseUrl, auth, paginationConfigs, values, onPageChange, onPostback, onNavigate }: StaticFieldProps) {
+export function StaticFieldForObject({ field, value, baseUrl, auth, values, onPageChange, onPostback, onNavigate }: StaticFieldProps) {
   const data = normalizeValue(value)
   const obj = data && typeof data === 'object' && !Array.isArray(data) ? (data as Record<string, unknown>) : {}
-  const { hasActions, modals, openActions } = useFieldActions(actions, field.id, baseUrl, auth, onPostback, onNavigate)
 
   const children = (
     <div className="flex flex-col gap-3">
@@ -209,11 +183,8 @@ export function StaticFieldForObject({ field, value, actions, baseUrl, auth, pag
           key={child.id}
           field={child}
           value={obj[child.name]}
-          actions={actions}
           baseUrl={baseUrl}
           auth={auth}
-          fieldPath={child.id}
-          paginationConfigs={paginationConfigs}
           values={values}
           onPageChange={onPageChange}
           onPostback={onPostback}
@@ -223,38 +194,25 @@ export function StaticFieldForObject({ field, value, actions, baseUrl, auth, pag
     </div>
   )
 
-  if (!field.fieldset) return <>{children}{modals}</>
+  if (!field.fieldset) return <>{children}</>
 
   return (
     <fieldset className="border border-zinc-800 rounded p-3 flex flex-col gap-3">
       <div className="flex items-center justify-between">
         <legend className="text-sm font-semibold text-zinc-300 px-1">{field.label}</legend>
-        {hasActions && (
-          <Button type="button" variation="icon" onClick={(e) => { e.stopPropagation(); openActions(obj) }}>
-            <Grip className="w-5 h-5" />
-          </Button>
-        )}
+        <FieldActions field={field} item={obj} baseUrl={baseUrl} auth={auth} onPostback={onPostback} onNavigate={onNavigate} />
       </div>
       {field.description && <p className="text-xs text-zinc-500">{field.description}</p>}
       {children}
-      {modals}
     </fieldset>
   )
 }
 
-// ---------------------------------------------------------------------------
-// StaticFieldForArray
-// ---------------------------------------------------------------------------
-
-export function StaticFieldForArray({ field, value, actions, baseUrl, auth, paginationConfigs, values, onPageChange, onPostback, onNavigate }: StaticFieldProps) {
+export function StaticFieldForArray({ field, value, baseUrl, auth, values, onPageChange, onPostback, onNavigate }: StaticFieldProps) {
   const data = normalizeValue(value)
   const items = Array.isArray(data) ? data : []
   const hasObjectItems = isObjectArray(field)
   const labels = hasObjectItems ? findResponsePanelTableLabel(field) : ['Value']
-  const { hasActions, modals, openActions } = useFieldActions(actions, field.id, baseUrl, auth, onPostback, onNavigate)
-
-  // Find pagination config for this specific array field
-  const paginationConfig = paginationConfigs?.find((c) => c.operationFieldId === field.id)
 
   function renderContent(item: unknown) {
     if (hasObjectItems) {
@@ -262,10 +220,8 @@ export function StaticFieldForArray({ field, value, actions, baseUrl, auth, pagi
         <StaticField
           field={{ ...field, type: 'object' }}
           value={item}
-          actions={actions}
           baseUrl={baseUrl}
           auth={auth}
-          paginationConfigs={paginationConfigs}
           values={values}
           onPageChange={onPageChange}
           onPostback={onPostback}
@@ -273,6 +229,7 @@ export function StaticFieldForArray({ field, value, actions, baseUrl, auth, pagi
         />
       )
     }
+
     return <span className="text-sm">{formatValue(item)}</span>
   }
 
@@ -304,11 +261,7 @@ export function StaticFieldForArray({ field, value, actions, baseUrl, auth, pagi
                   <span className="text-sm font-semibold overflow-hidden text-ellipsis whitespace-nowrap">{formatValue(item)}</span>
                 )}
               </div>
-              {hasActions && (
-                <Button type="button" variation="icon" onClick={(e) => { e.stopPropagation(); openActions(item) }}>
-                  <Grip className="w-5 h-5" />
-                </Button>
-              )}
+              <FieldActions field={field} item={item} baseUrl={baseUrl} auth={auth} onPostback={onPostback} onNavigate={onNavigate} />
             </div>
           </AccordionTitle>
           <Accordion variation="transparent">
@@ -325,21 +278,13 @@ export function StaticFieldForArray({ field, value, actions, baseUrl, auth, pagi
     </If>
   )
 
-  // console.log("field:", field)
-  // console.log("paginationConfigs:", paginationConfigs)
-  // console.log("paginationConfig for this field:", paginationConfig)
-  // console.log("values:", values)
-  // console.log("validation:", paginationConfig != null && values !== null && onPageChange !== undefined)
-
-  const pagination = paginationConfig && values && onPageChange ? (
+  const pagination = field.paginationConfig && values && onPageChange ? (
     <PaginationPanel
-      config={paginationConfig}
+      config={field.paginationConfig}
       values={values}
       onPageChange={onPageChange}
     />
   ) : null
-
-  console.log("pagination:", pagination)
 
   if (!field.fieldset) {
     return (
@@ -348,7 +293,6 @@ export function StaticFieldForArray({ field, value, actions, baseUrl, auth, pagi
         <If conditional={items.length > 0}>{items.map(renderItem)}</If>
         {emptyState}
         {pagination}
-        {modals}
       </div>
     )
   }
@@ -360,18 +304,11 @@ export function StaticFieldForArray({ field, value, actions, baseUrl, auth, pagi
       <If conditional={items.length > 0}>{items.map(renderItem)}</If>
       {emptyState}
       {pagination}
-      {modals}
     </fieldset>
   )
 }
 
-// ---------------------------------------------------------------------------
-// StaticFieldForBoolean
-// ---------------------------------------------------------------------------
-
-export function StaticFieldForBoolean({ field, value, actions, baseUrl, auth, onPostback, onNavigate }: StaticFieldProps) {
-  const { hasActions, modals, openActions } = useFieldActions(actions, field.id, baseUrl, auth, onPostback, onNavigate)
-
+export function StaticFieldForBoolean({ field, value, baseUrl, auth, onPostback, onNavigate }: StaticFieldProps) {
   return (
     <InputRoot variation="checkbox">
       <div className="flex items-center justify-between">
@@ -379,28 +316,18 @@ export function StaticFieldForBoolean({ field, value, actions, baseUrl, auth, on
           {field.label}
           {field.required && <span className="text-red-400 ml-1">*</span>}
         </Label>
-        {hasActions && (
-          <Button type="button" variation="icon" onClick={(e) => { e.stopPropagation(); openActions(value) }}>
-            <Grip className="w-5 h-5" />
-          </Button>
-        )}
+        <FieldActions field={field} item={value} baseUrl={baseUrl} auth={auth} onPostback={onPostback} onNavigate={onNavigate} />
       </div>
       {field.description && <div className="text-xs text-zinc-500 mb-2">{field.description}</div>}
       <Checkbox defaultValue={Boolean(value).toString()} data={'true'}>
         <Check size={16} />
       </Checkbox>
-      {modals}
     </InputRoot>
   )
 }
 
-// ---------------------------------------------------------------------------
-// StaticFieldString
-// ---------------------------------------------------------------------------
-
-export function StaticFieldString({ field, value, actions, baseUrl, auth, onPostback, onNavigate }: StaticFieldProps) {
+export function StaticFieldString({ field, value, baseUrl, auth, onPostback, onNavigate }: StaticFieldProps) {
   const data = normalizeValue(value)
-  const { hasActions, modals, openActions } = useFieldActions(actions, field.id, baseUrl, auth, onPostback, onNavigate)
 
   return (
     <InputRoot>
@@ -411,35 +338,26 @@ export function StaticFieldString({ field, value, actions, baseUrl, auth, onPost
       {field.description && <div className="text-xs text-zinc-500 mb-2">{field.description}</div>}
       <div className="flex items-center gap-3 flex-1">
         <Text disabled type="text" value={formatValue(data)} placeholder={field.placeholder ?? field.label} />
-        {hasActions && (
-          <Button type="button" variation="icon" onClick={(e) => { e.stopPropagation(); openActions(value) }}>
-            <Grip className="w-5 h-5" />
-          </Button>
-        )}
+        <FieldActions field={field} item={value} baseUrl={baseUrl} auth={auth} onPostback={onPostback} onNavigate={onNavigate} />
       </div>
-      {modals}
     </InputRoot>
   )
 }
 
-// ---------------------------------------------------------------------------
-// StaticField — router
-// ---------------------------------------------------------------------------
-
-export function StaticField({ field, value, actions, baseUrl, auth, fieldPath, paginationConfigs, values, onPageChange, onPostback, onNavigate }: StaticFieldProps) {
+export function StaticField({ field, value, baseUrl, auth, values, onPageChange, onPostback, onNavigate }: StaticFieldProps) {
   if (field.render === false) return null
 
   if (field.type === 'object') {
-    return <StaticFieldForObject field={field} value={value} actions={actions} baseUrl={baseUrl} auth={auth} fieldPath={fieldPath} paginationConfigs={paginationConfigs} values={values} onPageChange={onPageChange} onPostback={onPostback} onNavigate={onNavigate} />
+    return <StaticFieldForObject field={field} value={value} baseUrl={baseUrl} auth={auth} values={values} onPageChange={onPageChange} onPostback={onPostback} onNavigate={onNavigate} />
   }
 
   if (field.type === 'array') {
-    return <StaticFieldForArray field={field} value={value} actions={actions} baseUrl={baseUrl} auth={auth} fieldPath={fieldPath} paginationConfigs={paginationConfigs} values={values} onPageChange={onPageChange} onPostback={onPostback} onNavigate={onNavigate} />
+    return <StaticFieldForArray field={field} value={value} baseUrl={baseUrl} auth={auth} values={values} onPageChange={onPageChange} onPostback={onPostback} onNavigate={onNavigate} />
   }
 
   if (field.type === 'boolean') {
-    return <StaticFieldForBoolean field={field} value={value} actions={actions} baseUrl={baseUrl} auth={auth} fieldPath={fieldPath} onPostback={onPostback} onNavigate={onNavigate} />
+    return <StaticFieldForBoolean field={field} value={value} baseUrl={baseUrl} auth={auth} onPostback={onPostback} onNavigate={onNavigate} />
   }
 
-  return <StaticFieldString field={field} value={value} actions={actions} baseUrl={baseUrl} auth={auth} fieldPath={fieldPath} onPostback={onPostback} onNavigate={onNavigate} />
+  return <StaticFieldString field={field} value={value} baseUrl={baseUrl} auth={auth} onPostback={onPostback} onNavigate={onNavigate} />
 }

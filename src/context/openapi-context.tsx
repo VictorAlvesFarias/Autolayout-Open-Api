@@ -57,7 +57,6 @@ export function OpenApiProvider({ children }: { children: ReactNode }) {
       localStorage.setItem(SPEC_URL_STORAGE_KEY, url)
     }
     catch {
-      // localStorage can be unavailable in restricted browser modes.
     }
   }, [])
 

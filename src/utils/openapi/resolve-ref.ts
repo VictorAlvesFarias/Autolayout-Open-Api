@@ -38,8 +38,7 @@ export function resolveRef<T>(
     if (
       current === null ||
       current === undefined ||
-      typeof current !== 'object'
-    ) {
+      typeof current !== 'object') {
       throw new Error(
         `Referência inválida: ${args.ref}`,
       )
@@ -83,9 +82,7 @@ export function dereferenceSchema(
     })
   }
 
-  const result: OpenAPIV3.SchemaObject = {
-    ...args.schema,
-  }
+  const result: OpenAPIV3.SchemaObject = { ...args.schema, }
 
   if (result.properties) {
     const props: Record<
@@ -108,30 +105,26 @@ export function dereferenceSchema(
 
   if (
     'items' in result &&
-    result.items
-  ) {
+    result.items) {
     result.items = dereferenceSchema({
       doc: args.doc,
       schema:
         result.items as
-          | OpenAPIV3.SchemaObject
-          | OpenAPIV3.ReferenceObject,
+        | OpenAPIV3.SchemaObject
+        | OpenAPIV3.ReferenceObject,
       depth: depth + 1,
     })
   }
 
-  if (
-    result.additionalProperties &&
-    typeof result.additionalProperties ===
-      'object'
-  ) {
+  if (result.additionalProperties && typeof result.additionalProperties ===
+    'object') {
     result.additionalProperties =
       dereferenceSchema({
         doc: args.doc,
         schema:
           result.additionalProperties as
-            | OpenAPIV3.SchemaObject
-            | OpenAPIV3.ReferenceObject,
+          | OpenAPIV3.SchemaObject
+          | OpenAPIV3.ReferenceObject,
         depth: depth + 1,
       })
   }
@@ -144,10 +137,7 @@ export function dereferenceSchema(
     })
   }
 
-  if (
-    result.oneOf &&
-    result.oneOf.length > 0
-  ) {
+  if (result.oneOf && result.oneOf.length > 0) {
     const schema = dereferenceSchema({
       doc: args.doc,
       schema: result.oneOf[0],
@@ -161,10 +151,7 @@ export function dereferenceSchema(
     }
   }
 
-  if (
-    result.anyOf &&
-    result.anyOf.length > 0
-  ) {
+  if (result.anyOf && result.anyOf.length > 0) {
     const schema = dereferenceSchema({
       doc: args.doc,
       schema: result.anyOf[0],
