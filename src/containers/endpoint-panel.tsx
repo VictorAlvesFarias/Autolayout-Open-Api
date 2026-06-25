@@ -59,9 +59,9 @@ export function EndpointPanel({ endpoint }: EndpointPanelProps) {
     try {
       const result = await executeRequest({ baseUrl, endpoint, values: formValues, auth })
 
-      setValues(prev => ({ ...prev, responses: result.data }))
+      setValues(prev => ({ ...prev, responses: { ...prev.responses, [responseCode]: result.data } }))
 
-      if (endpoint.returnBind?.length) {  
+      if (endpoint.returnBind?.length) {
         applyReturnBind(endpoint.returnBind, result.data)
       }
     }
@@ -153,17 +153,29 @@ export function EndpointPanel({ endpoint }: EndpointPanelProps) {
     )
   }
 
-  function setFieldValue(group: FieldGroup, path: string[], value: unknown) {
+  function setFieldValue(group: FieldGroup, path: string[], value: unknown, timeout?: number): void {
     function set(obj: Record<string, unknown>, [head, ...tail]: string[]): Record<string, unknown> {
-      if (tail.length === 0) return { ...obj, [head]: value }
+      if (tail.length === 0) {
+        return { ...obj, [head]: value }
+      }
+
       return { ...obj, [head]: set((obj[head] as Record<string, unknown>) ?? {}, tail) }
     }
 
     const next = { ...values, [group]: set(values[group] as Record<string, unknown>, path) }
+
     setValues(next)
 
-    if (timeoutActionRef.current) clearTimeout(timeoutActionRef.current)
-    timeoutActionRef.current = setTimeout(() => sendRequest(next), 500)
+    if (timeout !== undefined) {
+      if (timeoutActionRef.current) {
+        clearTimeout(timeoutActionRef.current)
+      }
+
+      timeoutActionRef.current = setTimeout(() => sendRequest(next), timeout)
+    }
+    else {
+      sendRequest(next)
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -275,7 +287,7 @@ export function EndpointPanel({ endpoint }: EndpointPanelProps) {
           <DinamicField
             field={searchInputField}
             value={String(getFieldValue(searchInputField.group, searchInputField.path) ?? '')}
-            onChange={(v) => setFieldValue(searchInputField.group, searchInputField.path, v)}
+            onChange={(v) => setFieldValue(searchInputField.group, searchInputField.path, v, 500)}
           />
         )}
 
@@ -344,8 +356,7 @@ export function EndpointPanel({ endpoint }: EndpointPanelProps) {
 
       <Card>
         <h3 className="text-base font-semibold text-purple-300 mb-3">Response</h3>
-
-        <If conditional={sending}>
+        <div aria-checked={sending} className="absolute w-full h-full top-0 left-0 p-3 bg-zinc-900 transition-opacity duration-300 opacity-0 pointer-events-none aria-checked:opacity-100 aria-checked:pointer-events-auto">
           <div className="flex flex-col gap-3 animate-pulse py-1">
             <div className="h-2.5 bg-zinc-700 rounded-full w-2/3" />
             <div className="flex gap-2">
@@ -355,9 +366,9 @@ export function EndpointPanel({ endpoint }: EndpointPanelProps) {
             <div className="h-2.5 bg-zinc-700 rounded-full w-4/5" />
             <div className="h-2.5 bg-zinc-700 rounded-full w-1/3" />
           </div>
-        </If>
+        </div>
 
-        <If conditional={!sending && responses.length > 0}>
+        <If conditional={responses.length > 0}>
           <div className="flex flex-col gap-3">
             <ToggleGroupContext value={responseCode} onChange={(v) => setResponseCode(v)}>
               <ToggleGroup>
@@ -376,7 +387,7 @@ export function EndpointPanel({ endpoint }: EndpointPanelProps) {
                 <StaticField
                   key={i}
                   field={{ ...responseField, fieldset: startFieldset }}
-                  value={values?.responses}
+                  value={values?.[responseField.group]?.[responseField.name]}
                   actions={endpoint.actions}
                   baseUrl={baseUrl}
                   auth={auth}

@@ -14,7 +14,7 @@ export default function SpecLoader() {
 
 
   return (
-    <div className="p-4 border-b border-zinc-800 flex flex-col gap-3">
+    <div className="p-3 border-b border-zinc-800 flex flex-col gap-3">
       <div className="flex items-center gap-2 text-white">
         <Settings className="w-5 h-5 text-violet-400" />
         <span className="font-semibold text-sm">Configuração</span>
@@ -29,7 +29,7 @@ export default function SpecLoader() {
         />
       </div>
 
-      <Button onClick={loadSpec} loading={loading} className="w-full !rounded-lg gap-2">
+      <Button onClick={loadSpec} loading={loading} className="w-full !rounded-lg gap-3">
         Load
       </Button>
 

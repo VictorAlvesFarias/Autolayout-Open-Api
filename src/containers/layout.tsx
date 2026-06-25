@@ -17,189 +17,50 @@ import ModalRoot from '../components/modal-root'
 import Button from '../components/button'
 import { useContext } from 'react'
 import { resolveEndpoints } from '../services/openapi-normalizer'
-import type { EndpointConfig } from '../types/operation'
+import type { EndpointConfig, OperationEndpoint, OperationField } from '../types/operation'
 import { AuthPanel } from './auth-panel'
-
-const ENDPOINT_CONFIG: EndpointConfig[] = [
-  {
-    operationId: 'get--users',
-    rules: [
-      {
-        match: (field) => field.id === 'query.name',
-        patch: (field) => ({ ...field, render: false }),
-      },
-    ],
-    actions: [
-      {
-        type: 'request',
-        postback: true,
-        targetOperationId: 'delete--users--id-',
-        label: 'Deletar usuário',
-        path: 'responses.200',
-        bind: [
-          { from: 'id', to: 'path.id' },
-          { to: 'query.reason', fallbackValue: 'none' },
-        ],
-      },
-      {
-        type: 'navigate',
-        targetOperationId: 'get--users--id-',
-        label: 'Ver detalhes',
-        path: 'responses.200',
-        bind: [{ from: 'id', to: 'path.id' }],
-      },
-      {
-        type: 'navigate',
-        targetOperationId: 'put--users--id-',
-        label: 'Atualizar usuário',
-        path: 'responses.200',
-        bind: [{ from: 'id', to: 'path.id' }],
-      },
-    ],
-  },
-  {
-    operationId: 'put--users--id-',
-    render: false,
-    rules: [
-      {
-        match: (field) => field.id === 'query.name',
-        patch: (field) => ({ ...field, render: false }),
-      },
-    ],
-    actions: [
-      {
-        type: 'init',
-        targetOperationId: 'get--users--id-',
-        label: '',
-        path: '',
-        bind: [{ from: 'id', to: 'path.id' }],
-        returnBind: [
-          { from: 'name', to: 'body.name' },
-          { from: 'address', to: 'body.address' },
-        ],
-      },
-    ],
-  },
-  {
-    operationId: 'get--users--id-',
-    render: false,
-  },
-  {
-    operationId: 'delete--users--id-',
-    render: false,
-  },
-  {
-    operationId: 'get--user-types',
-    searchInputId: 'query.SearchInput',
-    runOnInit: true,
-    // rules: [
-    //   {
-    //     match: (field) => {
-    //       const fields = [
-    //         'responses.200.currentPage',
-    //         'responses.200.pageSize',
-    //         'responses.200.totalItems',
-    //         'responses.200.totalItemsPage',
-    //         'responses.200.totalPages'
-    //       ]
-
-    //       return fields.includes(field.id)
-    //     },
-    //     patch: (field) => {
-    //       return { ...field, render: false }
-    //     },
-    //   },
-    //   {
-    //     match: (field) => {
-    //       const fields = [
-    //         'query.PageSize',
-    //       ]
-
-    //       return fields.includes(field.id)
-    //     },
-    //     patch: (field) => {
-    //       return { ...field, defaultValue: 100 }
-    //     },
-    //   },
-    //   {
-    //     match: (field) => {
-    //       const fields = [
-    //         'query.CurrentPage',
-    //       ]
-
-    //       return fields.includes(field.id)
-    //     },
-    //     patch: (field) => {
-    //       return { ...field, defaultValue: 1 }
-    //     },
-    //   },
-    //   {
-    //     match: (field, parent) => !((parent?.children?.filter(e => e.render).length ?? 0) > 1),
-    //     patch: (field) => ({ ...field, fieldset: false }),
-    //   },
-    // ],
-    actions: [
-      {
-        type: 'request',
-        postback: true,
-        targetOperationId: 'delete--user-types--id-',
-        label: 'Deletar usuário',
-        path: 'responses.200.items',
-        bind: [
-          { from: 'id', to: 'path.id' },
-          { to: 'query.reason', fallbackValue: 'none' },
-        ],
-      },
-      {
-        type: 'navigate',
-        targetOperationId: 'get--user-types--id-',
-        label: 'Ver detalhes',
-        path: 'responses.200.items',
-        bind: [{ from: 'id', to: 'path.id' }],
-      },
-      {
-        type: 'navigate',
-        targetOperationId: 'put--user-types--id-',
-        label: 'Atualizar usuário',
-        path: 'responses.200.items',
-        bind: [{ from: 'id', to: 'path.id' }],
-      },
-    ],
-    paginationFieldsConfigs: [
-      {
-        currentPageFieldId: 'query.CurrentPage',
-        totalPagesFieldId: 'responses.200.totalPages',
-        operationFieldId: 'responses.200.items',
-      },
-    ],
-  },
-  {
-    operationId: 'get--user-types--id-',
-    runOnInit: true
-  },
-  {
-    operationId: 'put--user-types--id-',
-    actions: [
-      {
-        type: 'init',
-        targetOperationId: 'get--user-types--id-',
-        label: '',
-        path: '',
-        bind: [{ from: 'id', to: 'path.id' }],
-        returnBind: [{ from: 'name', to: 'body.name' }],
-      },
-    ],
-  },
-]
+import { ENDPOINT_CONFIG } from '../../public/auto.config'
 
 function Layout() {
   const navigate = useNavigate()
+  const config = ENDPOINT_CONFIG as EndpointConfig[]
   const { loaded } = useContext(OpenApiContext)
   const allOperations = loaded?.tagGroups.flatMap((g) => g.operations) ?? []
-  const endpoints = resolveEndpoints(allOperations, ENDPOINT_CONFIG)
+  const endpoints = resolveEndpoints(allOperations, config)
+
+  function downloadEndpointFieldsMap(endpoints: OperationEndpoint[]) {
+    const result: Record<string, string[]> = {}
+
+    const flattenFields = (fields: OperationField[]): string[] => {
+      return fields
+        .flatMap(field => [
+          field.id,
+          ...(field.children ? flattenFields(field.children) : [])
+        ])
+        .sort((a, b) => a.localeCompare(b))
+    }
+
+    for (const endpoint of endpoints) {
+      result[endpoint.id] = flattenFields(endpoint.fields)
+    }
+
+    const blob = new Blob(
+      [JSON.stringify(result, null, 2)],
+      { type: 'application/json' }
+    )
+
+    const url = URL.createObjectURL(blob)
+
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'endpoint-fields.json'
+    link.click()
+
+    URL.revokeObjectURL(url)
+  }
 
   function redirect(routePath: string) {
-    navigate(`/${routePath}`)
+    navigate(routePath)
     return routePath
   }
 
@@ -212,7 +73,9 @@ function Layout() {
       <SidebarRoot>
         <SidebarMenu>
           <SpecLoader />
+
           <div className="flex flex-col gap-3 overflow-y-auto p-3">
+            <Button onClick={() => downloadEndpointFieldsMap(endpoints)}>Map</Button>
             {loaded?.tagGroups.map((group) => (
               <AccordionContext key={group.name}>
                 <AccordionRoot>

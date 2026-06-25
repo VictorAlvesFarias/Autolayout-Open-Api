@@ -13,11 +13,11 @@ export interface LoadedSpec {
 
 export async function loadOpenApiSpec(specUrl: string): Promise<LoadedSpec> {
   const response = await fetch(specUrl)
-
+  
   if (!response.ok) {
     throw new Error(`Falha ao carregar spec (${response.status}): ${response.statusText}`)
   }
-
+  
   const document = (await response.json()) as OpenAPIV3.Document
   const operations = extractOperations(document)
   const tagGroups = groupByTag({ operations })

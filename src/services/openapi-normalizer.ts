@@ -146,11 +146,7 @@ export function getMissingRequiredParams(
   return missing
 }
 
-export function applyRuleToTree(
-  field: OperationField,
-  rule: FieldPatchRule,
-  parent?: OperationField
-): OperationField {
+export function applyRuleToTree(field: OperationField, rule: FieldPatchRule, parent?: OperationField): OperationField {
   let result = field
 
   if (rule.match(result, parent)) {
@@ -227,22 +223,32 @@ export function isObjectArray(field: OperationField): boolean {
 }
 
 export function findResponsePanelTableValues(field?: OperationField, item?: unknown, length = 3): unknown[] {
-  if (!isObjectArray(field!)) return [item]
+  if (!isObjectArray(field!)) {
+    return [item]
+  }
+
   const values: unknown[] = []
+
   field?.children?.forEach((child) => {
     if (child.type !== 'object' && child.type !== 'array') {
       values.push((item as Record<string, unknown>)?.[child.name])
     }
   })
+
   return values.slice(0, length)
 }
 
 export function findResponsePanelTableLabel(field?: OperationField, length = 3): string[] {
-  if (!isObjectArray(field!)) return []
+  if (!isObjectArray(field!)) {
+    return []
+  }
+
   const values: string[] = []
+
   field?.children?.forEach((child) => {
     if (child.type !== 'object' && child.type !== 'array') values.push(child.label)
   })
+
   return values.slice(0, length)
 }
 
@@ -261,10 +267,13 @@ export function normalizeParameter(parameters: ApiParameter[]): OperationField[]
 
 export function insertParameter(fields: OperationField[], parameter: ApiParameter, segments: string[]) {
   let current = fields
+
   for (let i = 0; i < segments.length; i++) {
     const segment = segments[i]
     const isLeaf = i === segments.length - 1
+
     let field = current.find(f => f.name === segment)
+
     if (!field) {
       field = {
         id: `${parameter.in}.${segments.slice(0, i + 1).join('.')}`,
@@ -282,7 +291,11 @@ export function insertParameter(fields: OperationField[], parameter: ApiParamete
       }
       current.push(field)
     }
-    if (isLeaf) Object.assign(field, walkSchema(parameter.schema, parameter.in, segments, parameter.required))
+
+    if (isLeaf) {
+      Object.assign(field, walkSchema(parameter.schema, parameter.in, segments, parameter.required))
+    }
+
     field.children ??= []
     current = field.children
   }

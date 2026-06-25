@@ -106,6 +106,7 @@ export function PaginationPanel({ config, values, onPageChange }: PaginationPane
     onPageChange = onPageChange ?? (() => { })
 
     const { group: currentPageGroup, path: currentPagePath } = resolveFieldPath(config.currentPageFieldId)
+    const { group: totalPagesGroup, path: totalPagesPath } = resolveFieldPath(config.totalPagesFieldId)
 
     const currentPage = Number(
         currentPagePath.reduce<unknown>(
@@ -114,18 +115,25 @@ export function PaginationPanel({ config, values, onPageChange }: PaginationPane
         ) ?? 1
     )
 
-    const totalPages = Number(resolveResponseValue(config.totalPagesFieldId, values) ?? 0)
+    const totalPages = Number(
+        totalPagesPath.reduce<unknown>(
+            (acc, key) => (acc as Record<string, unknown>)?.[key],
+            values[totalPagesGroup] as unknown
+        ) ?? 1
+    )
 
     function handlePageChange(page: number) {
         onPageChange(currentPageGroup, currentPagePath, page)
     }
 
     return (
-        <div className="flex items-center justify-between gap-3 mt-3 pt-3 border-t border-zinc-800">
-            <span className="text-xs text-zinc-500">
-                Página {currentPage} de {totalPages}
-            </span>
-            <PaginationPanelItem currentPage={currentPage} totalPages={totalPages} onPageChange={handlePageChange} />
+        <div className="sticky top-0 w-full">
+            <div className="flex items-center justify-between gap-3 mt-3 pt-3 border-t border-zinc-800">
+                <span className="text-xs text-zinc-500">
+                    Página {currentPage} de {totalPages}
+                </span>
+                <PaginationPanelItem currentPage={currentPage} totalPages={totalPages} onPageChange={handlePageChange} />
+            </div>
         </div>
     )
 }

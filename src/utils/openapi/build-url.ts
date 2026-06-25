@@ -28,32 +28,48 @@ export interface SetNestedValueArgs {
 }
 
 export function getBaseUrl(args: GetBaseUrlArgs): string {
-  if (args.servers?.length) {
-    return args.servers[0].url.replace(/\/$/, '')
-  }
+  // if (args.servers?.length) {
+  //   console.log("servers")
+
+  //   return args.servers[0].url.replace(/\/$/, '')
+  // }
 
   try {
     const url = new URL(args.specUrl)
-    return `${url.protocol}//${url.host}`
+
+    // Separa o caminho da URL usando '/swagger' como ponto de corte e pega a primeira parte
+    const basePath = url.pathname.split('/swagger')[0]
+
+    // Retorna o protocolo, o host e o caminho (removendo qualquer barra final caso exista)
+    const finalUrl = `${url.protocol}//${url.host}${basePath.replace(/\/$/, '')}`
+
+    return finalUrl
   } catch {
     return ''
   }
 }
 
 export function buildRequestUrl(args: BuildRequestUrlArgs): string {
-  let path = args.endpoint.operationPath
+  let path = args.endpoint.operationPath ?? ''
 
   for (const [key, value] of Object.entries(args.values.path)) {
-    if (value === undefined || value === null || value === '') continue
+    if (value === undefined || value === null || value === '') {
+      continue
+    }
+
     const encodedValue = typeof value === 'object' ? JSON.stringify(value) : String(value)
-    path = path?.replace(`{${key}}`, encodeURIComponent(encodedValue))
+
+    path = path.replace(`{${key}}`, encodeURIComponent(encodedValue))
   }
 
-  let baseUrl = args.baseUrl
-  if (!baseUrl.endsWith('/')) baseUrl = `${baseUrl}/`
+  const normalizedBaseUrl = args.baseUrl.replace(/\/$/, '')
+  const normalizedPath = path.replace(/^\/+/, '')
+  const url = new URL(`${normalizedBaseUrl}/${normalizedPath}`)
 
-  const url = new URL(path ?? '', baseUrl)
-  appendQueryParams({ url, obj: args.values.query })
+  appendQueryParams({
+    url,
+    obj: args.values.query,
+  })
 
   return url.toString()
 }
@@ -62,15 +78,15 @@ export function walkFieldDefaults(field: OperationField, target: Record<string, 
   if (field.type === 'object' && field.children?.length) {
 
     const nested: Record<string, unknown> = {}
-    
+
     for (const child of field.children) {
       walkFieldDefaults(child, nested)
     }
-    
+
     if (Object.keys(nested).length > 0) {
       target[field.name] = nested
     }
-    
+
     return
   }
 
@@ -82,25 +98,25 @@ export function walkFieldDefaults(field: OperationField, target: Record<string, 
 
   if (field.defaultValue !== undefined) {
     target[field.name] = field.defaultValue
-    
+
     return
   }
 
   if (field.example !== undefined) {
     target[field.name] = field.example
-    
+
     return
   }
 
   if (field.type === 'boolean') {
     target[field.name] = false
-    
+
     return
   }
 
   if (field.type === 'integer' || field.type === 'number') {
     target[field.name] = 0
-    
+
     return
   }
 
