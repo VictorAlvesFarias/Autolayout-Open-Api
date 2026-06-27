@@ -38,13 +38,16 @@ export function getBaseUrl(args: GetBaseUrlArgs): string {
     const url = new URL(args.specUrl)
 
     // Separa o caminho da URL usando '/swagger' como ponto de corte e pega a primeira parte
+
     const basePath = url.pathname.split('/swagger')[0]
 
     // Retorna o protocolo, o host e o caminho (removendo qualquer barra final caso exista)
+
     const finalUrl = `${url.protocol}//${url.host}${basePath.replace(/\/$/, '')}`
 
     return finalUrl
-  } catch {
+  }
+  catch {
     return ''
   }
 }
@@ -57,7 +60,8 @@ export function buildRequestUrl(args: BuildRequestUrlArgs): string {
       continue
     }
 
-    const encodedValue = typeof value === 'object' ? JSON.stringify(value) : String(value)
+    // ⚠️  Ternário: prefira if/else para maior clareza.
+    const encodedValue = typeof value === 'object' ? JSON.stringify(value) : String(value);
 
     path = path.replace(`{${key}}`, encodeURIComponent(encodedValue))
   }
@@ -148,16 +152,23 @@ export function createInitialFormValues(args: CreateInitialFormValuesArgs): Reco
 
 export function appendQueryParams(args: AppendQueryParamsArgs): void {
   for (const [key, value] of Object.entries(args.obj)) {
-    if (value === undefined || value === null || value === '') continue
+    if (value === undefined || value === null || value === '') {
+      continue
+    }
 
-    const fullKey = args.prefix ? `${args.prefix}.${key}` : key
+    // ⚠️  Ternário: prefira if/else para maior clareza.
+    const fullKey = args.prefix ? `${args.prefix}.${key}` : key;
 
     if (Array.isArray(value)) {
       value.forEach((item, index) => {
-        if (item === undefined || item === null) return
+        if (item === undefined || item === null) {
+          return
+        }
+
         if (typeof item === 'object') {
           appendQueryParams({ url: args.url, obj: item as Record<string, unknown>, prefix: `${fullKey}[${index}]` })
-        } else {
+        }
+        else {
           args.url.searchParams.append(fullKey, String(item))
         }
       })
@@ -165,7 +176,12 @@ export function appendQueryParams(args: AppendQueryParamsArgs): void {
     }
 
     if (typeof value === 'object') {
-      appendQueryParams({ url: args.url, obj: value as Record<string, unknown>, prefix: fullKey })
+      appendQueryParams({
+        url: args.url,
+        obj: value as Record<string,
+        unknown>,
+        prefix: fullKey,
+      })
       continue
     }
 

@@ -29,6 +29,7 @@ export interface CreateFieldOptions {
 
 export function toReactRouterPath(operationPath: string, method: string): string {
   const converted = operationPath.replace(/\{([^}]+)\}/g, ':$1')
+
   return `/${method}${converted}`
 }
 
@@ -41,14 +42,16 @@ export function resolveBind(
   }
 
   for (const b of bind) {
-    const rawValue = b.from ? (item[b.from] ?? b.fallbackValue) : b.fallbackValue
+    // [WARNING] Ternary operator: prefer if/else for better readability.
+    const rawValue = b.from ? (item[b.from] ?? b.fallbackValue) : b.fallbackValue;
     const [group, ...segments] = b.to.split('.')
 
     if (rawValue !== null && typeof rawValue === 'object' && !Array.isArray(rawValue)) {
       for (const [key, val] of Object.entries(rawValue as Record<string, unknown>)) {
         setNestedValue({ target: values[group as FieldGroup], segments: [...segments, key], value: val })
       }
-    } else {
+    }
+    else {
       setNestedValue({ target: values[group as FieldGroup], segments, value: rawValue })
     }
   }
@@ -58,7 +61,10 @@ export function resolveBind(
 
 export function resolveEndpoints(operations: ApiOperation[], configMap: EndpointConfig[]): OperationEndpoint[] {
   const endpoints: OperationEndpoint[] = operations.map((op) => {
-    const config = configMap.find((c) => c.operationId === op.id)
+    const config = configMap.find(c => {
+      return c.operationId === op.id;
+    })
+
     const fields = normalizeOperation(op, config?.rules ?? [])
 
     return {
@@ -76,10 +82,14 @@ export function resolveEndpoints(operations: ApiOperation[], configMap: Endpoint
   })
 
   for (const endpoint of endpoints) {
-    const config = configMap.find((c) => c.operationId === endpoint.id)
+    const config = configMap.find(c => {
+      return c.operationId === endpoint.id;
+    })
 
     const resolvedActions = (config?.actions ?? []).flatMap((actionConfig) => {
-      const targetEndpoint = endpoints.find((e) => e.id === actionConfig.targetOperationId)
+      const targetEndpoint = endpoints.find(e => {
+        return e.id === actionConfig.targetOperationId;
+      })
 
       if (!targetEndpoint) {
         return []
@@ -100,7 +110,9 @@ export function resolveEndpoints(operations: ApiOperation[], configMap: Endpoint
 
     endpoint.actions = resolvedActions
 
-    for (const action of resolvedActions.filter((item) => item.type !== 'init')) {
+    for (const action of resolvedActions.filter(item => {
+      return item.type !== 'init';
+    })) {
       const field = findOperationField(action.path, endpoint.fields)
 
       if (field) {
@@ -127,7 +139,9 @@ export function getMissingRequiredParams(
   const missing: string[] = []
 
   function walk(field: OperationField): void {
-    if (!field.required) return
+    if (!field.required) {
+      return
+    }
 
     const val = getValueByFieldId(values, field.id)
 
@@ -139,11 +153,16 @@ export function getMissingRequiredParams(
   function walkTree(fields: OperationField[]): void {
     for (const field of fields) {
       walk(field)
-      if (field.children?.length) walkTree(field.children)
+
+      if (field.children?.length) {
+        walkTree(field.children)
+      }
     }
   }
 
-  walkTree(endpoint.fields.filter(f => f.group !== 'responses'))
+  walkTree(endpoint.fields.filter(f => {
+    return f.group !== 'responses';
+  }))
 
   return missing
 }
@@ -152,6 +171,7 @@ export function applyRuleToTree(field: OperationField, rule: FieldPatchRule, par
   let result = field
 
   if (rule.match(result, parent)) {
+    // [WARNING] Ternary operator: prefer if/else for better readability.
     result = typeof rule.patch === 'function'
       ? rule.patch(result, parent)
       : { ...result, ...rule.patch }
@@ -160,7 +180,9 @@ export function applyRuleToTree(field: OperationField, rule: FieldPatchRule, par
   if (result.children?.length) {
     result = {
       ...result,
-      children: result.children.map(child => applyRuleToTree(child, rule, result)),
+      children: result.children.map(child => {
+        return applyRuleToTree(child, rule, result);
+      }),
     }
   }
 
@@ -169,9 +191,11 @@ export function applyRuleToTree(field: OperationField, rule: FieldPatchRule, par
 
 export function applyPatch(field: OperationField, rules: FieldPatchRule[]): OperationField {
   let current = field
+
   for (const rule of rules) {
     current = applyRuleToTree(current, rule)
   }
+
   return current
 }
 
@@ -187,8 +211,16 @@ export function normalizeOperation(operation: ApiOperation, rules: FieldPatchRul
   }
 
   for (const response of operation.responses) {
-    for (const content of response.contents.filter(c => c.contentType === 'application/json')) {
-      fields.push(walkSchema(content.schema, 'responses', [response.statusCode], false, content.contentType))
+    for (const content of response.contents.filter(c => {
+      return c.contentType === 'application/json';
+    })) {
+      fields.push(walkSchema(
+        content.schema,
+        'responses',
+        [response.statusCode],
+        false,
+        content.contentType,
+      ))
     }
   }
 
@@ -196,7 +228,9 @@ export function normalizeOperation(operation: ApiOperation, rules: FieldPatchRul
     return fields
   }
 
-  return fields.map(field => applyPatch(field, rules))
+  return fields.map(field => {
+    return applyPatch(field, rules);
+  });
 }
 
 export function normalizeValue(value: unknown): unknown {
@@ -213,15 +247,34 @@ export function normalizeValue(value: unknown): unknown {
 }
 
 export function formatValue(value: unknown): string {
-  if (value === undefined) return '—'
-  if (value === null) return 'null'
-  if (typeof value === 'string') return value
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
-  try { return JSON.stringify(value, null, 2) } catch { return String(value) }
+  if (value === undefined) {
+    return '—'
+  }
+
+  if (value === null) {
+    return 'null'
+  }
+
+  if (typeof value === 'string') {
+    return value
+  }
+
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value)
+  }
+
+  try {
+    return JSON.stringify(value, null, 2)
+  }
+  catch {
+    return String(value)
+  }
 }
 
 export function isObjectArray(field: OperationField): boolean {
-  return field.children?.some(child => child.name !== '*') ?? false
+  return field.children?.some(child => {
+    return child.name !== '*';
+  }) ?? false;
 }
 
 export function findResponsePanelTableValues(field?: OperationField, item?: unknown, length = 3): unknown[] {
@@ -248,7 +301,9 @@ export function findResponsePanelTableLabel(field?: OperationField, length = 3):
   const values: string[] = []
 
   field?.children?.forEach((child) => {
-    if (child.type !== 'object' && child.type !== 'array') values.push(child.label)
+    if (child.type !== 'object' && child.type !== 'array') {
+      values.push(child.label)
+    }
   })
 
   return values.slice(0, length)
@@ -256,14 +311,23 @@ export function findResponsePanelTableLabel(field?: OperationField, length = 3):
 
 export function normalizeParameter(parameters: ApiParameter[]): OperationField[] {
   const tree: OperationField[] = []
+
   for (const parameter of parameters) {
     const segments = parameter.name.split('.')
+
     if (segments.length === 1) {
-      tree.push(walkSchema(parameter.schema, parameter.in, segments, parameter.required))
+      tree.push(walkSchema(
+        parameter.schema,
+        parameter.in,
+        segments,
+        parameter.required,
+      ))
       continue
     }
+
     insertParameter(tree, parameter, segments)
   }
+
   return tree
 }
 
@@ -274,9 +338,12 @@ export function insertParameter(fields: OperationField[], parameter: ApiParamete
     const segment = segments[i]
     const isLeaf = i === segments.length - 1
 
-    let field = current.find(f => f.name === segment)
+    let field = current.find(f => {
+      return f.name === segment;
+    })
 
     if (!field) {
+      // [WARNING] Ternary operator: prefer if/else for better readability.
       field = {
         id: `${parameter.in}.${segments.slice(0, i + 1).join('.')}`,
         group: parameter.in,
@@ -291,58 +358,103 @@ export function insertParameter(fields: OperationField[], parameter: ApiParamete
         children: [],
         render: true,
       }
+
       current.push(field)
     }
 
     if (isLeaf) {
-      Object.assign(field, walkSchema(parameter.schema, parameter.in, segments, parameter.required))
+      Object.assign(field, walkSchema(
+        parameter.schema,
+        parameter.in,
+        segments,
+        parameter.required,
+      ))
     }
 
     field.children ??= []
+
     current = field.children
   }
 }
 
 export function normalizeRequestBody(requestBody: ApiRequestBody): OperationField[] {
   const fields: OperationField[] = []
-  for (const content of requestBody.contents.filter(c => c.contentType === 'application/json')) {
+
+  for (const content of requestBody.contents.filter(c => {
+    return c.contentType === 'application/json';
+  })) {
     const schema = content.schema
+
     if (schema.type === 'object' && schema.properties) {
       for (const [propertyName, propertySchema] of Object.entries(schema.properties)) {
-        if ('$ref' in propertySchema) continue
+        if ('$ref' in propertySchema) {
+          continue
+        }
+
         fields.push(
           walkSchema(propertySchema, 'body', [propertyName], schema.required?.includes(propertyName) ?? false, content.contentType)
         )
       }
     }
   }
+
   return fields
 }
 
-export function walkSchema(schema: OpenAPIV3.SchemaObject, group: FieldGroup, path: string[], required: boolean, contentType?: string): OperationField {
-  const field = createField({ group, path, required, schema, contentType })
+// [WARNING] Function with many parameters: consider using an object or fewer params.
+export function walkSchema(
+  schema: OpenAPIV3.SchemaObject,
+  group: FieldGroup,
+  path: string[],
+  required: boolean,
+  contentType?: string
+): OperationField {
+  const field = createField({
+    group,
+    path,
+    required,
+    schema,
+    contentType,
+  })
+
   const children: OperationField[] = []
 
   if (schema.type === 'object' && schema.properties) {
     for (const [propertyName, propertySchema] of Object.entries(schema.properties)) {
-      if ('$ref' in propertySchema) continue
+      if ('$ref' in propertySchema) {
+        continue
+      }
+
       children.push(walkSchema(propertySchema, group, [...path, propertyName], schema.required?.includes(propertyName) ?? false, contentType))
     }
   }
 
   if (schema.type === 'array' && schema.items && !('$ref' in schema.items)) {
     const item = schema.items
+
     if (item.type === 'object' && item.properties) {
       for (const [propertyName, propertySchema] of Object.entries(item.properties)) {
-        if ('$ref' in propertySchema) continue
+        if ('$ref' in propertySchema) {
+          continue
+        }
+
         children.push(walkSchema(propertySchema, group, [...path, propertyName], item.required?.includes(propertyName) ?? false, contentType))
       }
-    } else {
-      children.push(walkSchema(item, group, [...path, '*'], false, contentType))
+    }
+    else {
+      children.push(walkSchema(
+        item,
+        group,
+        [...path, '*'],
+        false,
+        contentType,
+      ))
     }
   }
 
-  if (children.length > 0) field.children = children
+  if (children.length > 0) {
+    field.children = children
+  }
 
   return field
 }
@@ -350,9 +462,11 @@ export function walkSchema(schema: OpenAPIV3.SchemaObject, group: FieldGroup, pa
 export function createField(options: CreateFieldOptions): OperationField {
   const name = options.path[options.path.length - 1]
   const type = resolveType(options.schema)
-  const label = name === '*' ? 'Item' : options.schema.title ?? humanize(name)
+  // [WARNING] Ternary operator: prefer if/else for better readability.
+  const label = name === '*' ? 'Item' : options.schema.title ?? humanize(name);
   const fullPath = [options.group, ...options.path]
 
+  // [WARNING] Ternary operator: prefer if/else for better readability.
   return {
     id: fullPath.join('.'),
     fieldset: true,
@@ -385,28 +499,54 @@ export function createField(options: CreateFieldOptions): OperationField {
     readOnly: options.schema.readOnly,
     writeOnly: options.schema.writeOnly,
     render: true,
-  }
+  };
 }
 
 export function resolveType(schema: OpenAPIV3.SchemaObject): FieldType {
   switch (schema.type) {
-    case 'object': return 'object'
-    case 'array': return 'array'
-    case 'boolean': return 'boolean'
-    case 'integer': return 'integer'
-    case 'number': return 'number'
-    default: return 'string'
+    case 'object': {
+      return 'object'
+    }
+    case 'array': {
+      return 'array'
+    }
+    case 'boolean': {
+      return 'boolean'
+    }
+    case 'integer': {
+      return 'integer'
+    }
+    case 'number': {
+      return 'number'
+    }
+    default: {
+      return 'string'
+    }
   }
 }
 
 export function buildPlaceholder(schema: OpenAPIV3.SchemaObject): string | undefined {
-  if (schema.example != null) return String(schema.example)
-  if (schema.default != null) return String(schema.default)
+  if (schema.example != null) {
+    return String(schema.example)
+  }
+
+  if (schema.default != null) {
+    return String(schema.default)
+  }
+
   switch (schema.format) {
-    case 'email': return 'user@example.com'
-    case 'date': return 'yyyy-mm-dd'
-    case 'date-time': return 'yyyy-mm-ddThh:mm:ss'
-    default: return undefined
+    case 'email': {
+      return 'user@example.com'
+    }
+    case 'date': {
+      return 'yyyy-mm-dd'
+    }
+    case 'date-time': {
+      return 'yyyy-mm-ddThh:mm:ss'
+    }
+    default: {
+      return undefined
+    }
   }
 }
 
@@ -414,7 +554,9 @@ export function humanize(value: string): string {
   return value
     .replace(/([a-z])([A-Z])/g, '$1 $2')
     .replace(/[-_]/g, ' ')
-    .replace(/^\w/, c => c.toUpperCase())
+    .replace(/^\w/, c => {
+      return c.toUpperCase();
+    });
 }
 
 export function createDefaultValue(field?: OperationField): unknown {
@@ -432,11 +574,13 @@ export function createDefaultValue(field?: OperationField): unknown {
 
   if (field.type === 'object') {
     return Object.fromEntries(
-      (field.children ?? []).map(child => [
-        child.name,
-        createDefaultValue(child),
-      ])
-    )
+      (field.children ?? []).map(child => {
+        return [
+          child.name,
+          createDefaultValue(child),
+        ];
+      })
+    );
   }
 
   if (field.type === 'boolean') {
@@ -488,13 +632,20 @@ export function splitFieldId(id: string): { group: FieldGroup; path: string[] } 
   return { group: group as FieldGroup, path }
 }
 
-export function getValueByFieldId(values: Record<FieldGroup, Record<string, unknown>>, id: string): unknown {
+export function getValueByFieldId(
+  values: Record<FieldGroup,
+    Record<string,
+      unknown>>,
+  id: string,
+): unknown {
   const { group, path } = splitFieldId(id)
 
   return path.reduce<unknown>(
-    (acc, key) => (acc as Record<string, unknown>)?.[key],
+    (acc, key) => {
+      return (acc as Record<string, unknown>)?.[key];
+    },
     values[group] as unknown
-  )
+  );
 }
 
 export function findOperationField(id: string, fields: OperationField[]): OperationField | undefined {
@@ -506,7 +657,9 @@ export function findOperationField(id: string, fields: OperationField[]): Operat
     if (field.children?.length) {
       const child = findOperationField(id, field.children)
 
-      if (child) return child
+      if (child) {
+        return child
+      }
     }
   }
 }

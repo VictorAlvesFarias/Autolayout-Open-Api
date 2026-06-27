@@ -8,9 +8,8 @@ import SidebarHamburguer from '../components/sidebar-hamburguer'
 import SidebarItem from '../components/sidebar-item'
 import SidebarMenu from '../components/sidebar-menu'
 import SidebarRoot from '../components/sidebar-root'
-import { AccordionContext, ModalClose, ModalContext, ModalOpen, SidebarContext } from 'react-base-components'
+import { AccordionContext, ModalClose, ModalContext, ModalOpen, SidebarContext, } from 'react-base-components'
 import { OpenApiContext } from '../context/openapi-context'
-import { methodBadgeClass } from '../utils/openapi/method-colors'
 import { EndpointPanel } from './endpoint-panel'
 import SpecLoader from './spec-loader'
 import ModalRoot from '../components/modal-root'
@@ -25,7 +24,11 @@ function Layout() {
   const navigate = useNavigate()
   const config = ENDPOINT_CONFIG as EndpointConfig[]
   const { loaded } = useContext(OpenApiContext)
-  const allOperations = loaded?.tagGroups.flatMap((g) => g.operations) ?? []
+
+  const allOperations = loaded?.tagGroups.flatMap(g => {
+    return g.operations;
+  }) ?? []
+
   const endpoints = resolveEndpoints(allOperations, config)
 
   function downloadEndpointFieldsMap(endpoints: OperationEndpoint[]) {
@@ -33,11 +36,15 @@ function Layout() {
 
     const flattenFields = (fields: OperationField[]): string[] => {
       return fields
-        .flatMap(field => [
-          field.id,
-          ...(field.children ? flattenFields(field.children) : [])
-        ])
-        .sort((a, b) => a.localeCompare(b))
+        .flatMap(field => {
+          return [
+            field.id,
+            ...(field.children ? flattenFields(field.children) : [])
+          ];
+        })
+        .sort((a, b) => {
+          return a.localeCompare(b);
+        });
     }
 
     for (const endpoint of endpoints) {
@@ -50,10 +57,11 @@ function Layout() {
     )
 
     const url = URL.createObjectURL(blob)
-
     const link = document.createElement('a')
+
     link.href = url
     link.download = 'endpoint-fields.json'
+
     link.click()
 
     URL.revokeObjectURL(url)
@@ -61,6 +69,7 @@ function Layout() {
 
   function redirect(routePath: string) {
     navigate(routePath)
+
     return routePath
   }
 
@@ -73,11 +82,17 @@ function Layout() {
       <SidebarRoot>
         <SidebarMenu>
           <SpecLoader />
-
           <div className="flex flex-col gap-3 overflow-y-auto p-3">
-            <Button onClick={() => downloadEndpointFieldsMap(endpoints)}>Map</Button>
-            {loaded?.tagGroups.map((group) => (
-              <AccordionContext key={group.name}>
+            <Button
+              onClick={() => {
+                return downloadEndpointFieldsMap(endpoints);
+              }}
+            >
+              Map
+            </Button>
+
+            {loaded?.tagGroups.map(group => {
+              return (<AccordionContext key={group.name}>
                 <AccordionRoot>
                   <div className="mb-1">
                     <AccordionTitle>
@@ -89,26 +104,28 @@ function Layout() {
                     <Accordion>
                       <div className="flex flex-col gap-0.5 py-1">
                         {group.operations.map((op) => {
-                          const endpoint = endpoints.find((e) => e.id === op.id)
-                          if (!endpoint) return null
+                          const endpoint = endpoints.find(e => {
+                            return e.id === op.id;
+                          })
+
+                          if (!endpoint) {
+                            return null
+                          }
+
                           return (
-                            <SidebarItem key={op.id} redirect={() => redirect(endpoint.routePath)}>
-                              <div className="flex items-center gap-2">
-                                <span className={methodBadgeClass(op.method)}>{op.method}</span>
-                                <span className="truncate font-mono">{op.path}</span>
-                              </div>
-                              {op.summary && (
-                                <span className="text-zinc-500 truncate pl-1">{op.summary}</span>
-                              )}
+                            <SidebarItem key={op.id} redirect={() => {
+                              return redirect(endpoint.routePath);
+                            }}>
+                              <span className="">{op.method.toLowerCase()}{op.path}</span>
                             </SidebarItem>
-                          )
+                          );
                         })}
                       </div>
                     </Accordion>
                   </div>
                 </AccordionRoot>
-              </AccordionContext>
-            ))}
+              </AccordionContext>);
+            })}
           </div>
 
           <ModalContext>
@@ -134,7 +151,6 @@ function Layout() {
             </ModalRoot>
           </ModalContext>
         </SidebarMenu>
-
         <SidebarHamburguer>
           <header className="flex items-center gap-2 px-6 py-4 border-b border-zinc-800 shrink-0 w-full">
             <Zap className="w-6 h-6 text-violet-400" />
@@ -144,7 +160,6 @@ function Layout() {
             </div>
           </header>
         </SidebarHamburguer>
-
         <SidebarContent>
           <header className="flex items-center gap-2 px-6 py-4 border-b border-zinc-800 shrink-0 w-full">
             <Zap className="w-6 h-6 text-violet-400" />
@@ -154,10 +169,15 @@ function Layout() {
             </div>
           </header>
           <Routes>
-            {loaded?.tagGroups.map((group) =>
-              group.operations.map((op) => {
-                const endpoint = endpoints.find((e) => e.id === op.id)
-                if (!endpoint || !endpoint.render) return null
+            {loaded?.tagGroups.map(group => {
+              return group.operations.map((op) => {
+                const endpoint = endpoints.find(e => {
+                  return e.id === op.id;
+                })
+
+                if (!endpoint || !endpoint.render) {
+                  return null
+                }
 
                 return (
                   <Route
@@ -175,8 +195,8 @@ function Layout() {
                     }
                   />
                 )
-              })
-            )}
+              });
+            })}
             <Route
               path="/"
               element={
@@ -193,7 +213,7 @@ function Layout() {
         </SidebarContent>
       </SidebarRoot>
     </SidebarContext>
-  )
+  );
 }
 
 export default Layout
